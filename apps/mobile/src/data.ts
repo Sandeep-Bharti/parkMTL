@@ -16,7 +16,16 @@ import * as SQLite from 'expo-sqlite';
 import type { Rule } from '@parkmtl/rules-core';
 import type { RuleCombo } from '@parkmtl/rules-core';
 
+/** `file://…` form, which is what expo-file-system works in. */
 const DATA_DIR = `${FileSystem.documentDirectory}parkmtl`;
+
+/**
+ * Plain filesystem path form. expo-sqlite and MapLibre both want a real path,
+ * not a URI — passing them the `file://` form silently fails to open.
+ */
+const DATA_PATH = DATA_DIR.replace(/^file:\/\//, '');
+
+const DB_NAME = 'montreal.sqlite';
 
 export interface Artifacts {
   /** `pmtiles://file://…` URL for the parking data tileset. */
@@ -49,16 +58,43 @@ async function materialise(assetModule: number, name: string): Promise<string> {
   return target;
 }
 
+/**
+ * Drop the materialised copies when the shipped data has moved on.
+ *
+ * Tiles and dictionary must come from the same build — that is what
+ * `ruleDictVersion` guarantees — so they are replaced as a set, never one at a
+ * time. Without this, rebuilding the artifacts would leave the app reading
+ * yesterday's copies and colouring the city against the wrong dictionary.
+ */
+async function clearIfStale(version: string): Promise<void> {
+  const stampPath = `${DATA_DIR}/VERSION`;
+  const stamp = await FileSystem.getInfoAsync(stampPath);
+
+  if (stamp.exists) {
+    const current = await FileSystem.readAsStringAsync(stampPath);
+    if (current === version) return;
+    await FileSystem.deleteAsync(DATA_DIR, { idempotent: true });
+  }
+
+  await FileSystem.makeDirectoryAsync(DATA_DIR, { intermediates: true }).catch(() => {});
+  await FileSystem.writeAsStringAsync(stampPath, version);
+}
+
 export async function loadArtifacts(): Promise<Artifacts> {
   await FileSystem.makeDirectoryAsync(DATA_DIR, { intermediates: true }).catch(() => {});
 
-  const [dataTiles, baseTiles, dbPath] = await Promise.all([
+  const manifest = require('../assets/data/manifest.json') as { ruleDictVersion: string };
+  await clearIfStale(manifest.ruleDictVersion);
+
+  const [dataTiles, baseTiles] = await Promise.all([
     materialise(require('../assets/data/montreal.pmtiles'), 'montreal.pmtiles'),
     materialise(require('../assets/data/montreal-base.pmtiles'), 'montreal-base.pmtiles'),
-    materialise(require('../assets/data/montreal.sqlite'), 'montreal.sqlite'),
+    materialise(require('../assets/data/montreal.sqlite'), DB_NAME),
   ]);
 
-  const db = await SQLite.openDatabaseAsync(dbPath, undefined, dbPath);
+  // `databaseName` is a file name and `directory` is the folder holding it —
+  // not two halves of a path.
+  const db = await SQLite.openDatabaseAsync(DB_NAME, undefined, DATA_PATH);
 
   const ruleRows = await db.getAllAsync<{ json: string }>('SELECT json FROM rules');
   const rules = ruleRows.map((r) => JSON.parse(r.json) as Rule);
@@ -82,8 +118,9 @@ export async function loadArtifacts(): Promise<Artifacts> {
   await db.closeAsync();
 
   return {
-    dataTilesUrl: `pmtiles://file://${dataTiles.replace('file://', '')}`,
-    baseTilesUrl: `pmtiles://file://${baseTiles.replace('file://', '')}`,
+    // MapLibre Native needs the URL inside pmtiles:// fully qualified.
+    dataTilesUrl: `pmtiles://file://${dataTiles.replace(/^file:\/\//, '')}`,
+    baseTilesUrl: `pmtiles://file://${baseTiles.replace(/^file:\/\//, '')}`,
     rules,
     combos,
     meta,

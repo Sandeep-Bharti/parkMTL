@@ -67,6 +67,10 @@ export function buildStyle({
 
   return {
     version: 8,
+    // NOT yet offline: the tiles are local but label glyphs and sprites are
+    // still fetched over HTTP, so a cold start with no connection draws the
+    // map without text. Bundling the glyph ranges is outstanding work — see
+    // the Phase 5 attribution/i18n pass, which has to touch fonts anyway.
     glyphs: 'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf',
     sprite: `https://protomaps.github.io/basemaps-assets/sprites/v4/${dark ? 'dark' : 'light'}`,
     sources: {
