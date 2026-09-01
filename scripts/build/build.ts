@@ -22,8 +22,10 @@ import { fileURLToPath } from 'node:url';
 
 import {
   amdRuleIds,
+  buildCombos,
   buildPoles,
   buildRuleDict,
+  comboKey,
   loadAmd,
   loadSignage,
   ruleIdOf,
@@ -67,7 +69,12 @@ const amdRules: Rule[] = [...amd.rules]
 
 const rules: Rule[] = [...signRules, ...amdRules];
 
+// A bay can be governed by up to 16 regulations at once and a map `match`
+// cannot evaluate a list, so each distinct set of regulations gets one id.
+const { byKey: comboByKey, combos } = buildCombos(amd.spaces, amdIds);
+
 console.log(`  rules      ${rules.length} (${signRules.length} signage + ${amdRules.length} AMD)`);
+console.log(`  combos     ${combos.length}`);
 console.log(`  poles      ${poles.size}`);
 console.log(`  signs      ${signage.length}`);
 console.log(`  spaces     ${amd.spaces.length}`);
@@ -121,7 +128,7 @@ for (const [poleId, pole] of poles) {
 const bayLines = amd.spaces.map((s) =>
   feature(s.centreLon, s.centreLat, {
     space: s.id,
-    ruleId: s.ruleCodes.map((c) => amdIds.get(c)).filter((v) => v !== undefined),
+    comboId: comboByKey.get(comboKey(s.ruleCodes))!,
     paid: isPaidSpace(s, amd.rules) ? 1 : 0,
   }),
 );
@@ -145,6 +152,7 @@ db.exec(`
   DROP TABLE IF EXISTS signs;
   DROP TABLE IF EXISTS spaces;
   DROP TABLE IF EXISTS space_rules;
+  DROP TABLE IF EXISTS combo_rules;
   DROP TABLE IF EXISTS meta;
 
   CREATE TABLE rules (
@@ -176,10 +184,16 @@ db.exec(`
     hourly_rate_cents INTEGER,
     max_tariff_cents INTEGER,
     exploitation TEXT,
-    paired TEXT
+    paired TEXT,
+    combo_id INTEGER NOT NULL
   );
   CREATE TABLE space_rules (
     space_id TEXT NOT NULL,
+    rule_id INTEGER NOT NULL
+  );
+  -- comboId is what the bay tiles carry; this expands one back to its rules.
+  CREATE TABLE combo_rules (
+    combo_id INTEGER NOT NULL,
     rule_id INTEGER NOT NULL
   );
   CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -213,8 +227,9 @@ for (const [poleId, pole] of poles) {
 
 const insertSpace = db.prepare(
   `INSERT INTO spaces
-     (id, lon, lat, street, accessible, hourly_rate_cents, max_tariff_cents, exploitation, paired)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (id, lon, lat, street, accessible, hourly_rate_cents, max_tariff_cents,
+      exploitation, paired, combo_id)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 const insertSpaceRule = db.prepare(
   'INSERT INTO space_rules (space_id, rule_id) VALUES (?, ?)',
@@ -230,11 +245,19 @@ for (const space of amd.spaces) {
     space.maxTariffCents ?? null,
     space.exploitation,
     space.paired ?? null,
+    comboByKey.get(comboKey(space.ruleCodes))!,
   );
   for (const code of space.ruleCodes) {
     const id = amdIds.get(code);
     if (id !== undefined) insertSpaceRule.run(space.id, id);
   }
+}
+
+const insertComboRule = db.prepare(
+  'INSERT INTO combo_rules (combo_id, rule_id) VALUES (?, ?)',
+);
+for (const combo of combos) {
+  for (const ruleId of combo.ruleIds) insertComboRule.run(combo.id, ruleId);
 }
 
 const insertMeta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)');
@@ -247,6 +270,7 @@ db.exec('COMMIT');
 // The two queries the detail sheet actually makes.
 db.exec('CREATE INDEX idx_signs_pole ON signs(pole_id)');
 db.exec('CREATE INDEX idx_space_rules_space ON space_rules(space_id)');
+db.exec('CREATE INDEX idx_combo_rules_combo ON combo_rules(combo_id)');
 db.exec('VACUUM');
 db.close();
 
@@ -264,6 +288,7 @@ const manifest = {
   ruleDictVersion,
   counts: {
     rules: rules.length,
+    combos: combos.length,
     poles: poles.size,
     signs: signage.length,
     spaces: amd.spaces.length,

@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "parkmtl",
+    "slug": "parkmtl",
+    "scheme": "parkmtl",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ca.parkmtl.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Shows which parking near you is free right now."
+      }
+    },
+    "android": {
+      "package": "ca.parkmtl.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-dev-client",
+      "expo-sqlite",
+      [
+        "@maplibre/maplibre-react-native",
+        {
+          "android": { "nativeVersion": "13.2.0" },
+          "ios": { "nativeVersion": "6.26.0" }
+        }
+      ]
+    ],
+    "assetBundlePatterns": ["**/*"],
+    "packagerOpts": {
+      "assetExts": ["pmtiles", "sqlite"]
+    }
+  }
+}

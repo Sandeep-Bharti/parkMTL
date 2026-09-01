@@ -164,3 +164,37 @@ export function amdRuleIds(codes: Iterable<string>): Map<string, number> {
   const sorted = [...new Set(codes)].sort();
   return new Map(sorted.map((code, i) => [code, AMD_ID_BASE + i]));
 }
+
+/**
+ * Name each distinct set of regulations with one integer.
+ *
+ * A paid bay carries up to sixteen regulations, and a MapLibre `match`
+ * expression cannot evaluate a list — so the bay carries a `comboId` instead.
+ * Only ~1,250 distinct combinations exist, so folding rule statuses into
+ * combination statuses stays a few thousand map lookups per frame.
+ *
+ * Keyed by the sorted code list so the numbering is reproducible.
+ */
+export function buildCombos(
+  spaces: Array<{ ruleCodes: string[] }>,
+  ruleIds: Map<string, number>,
+): { byKey: Map<string, number>; combos: Array<{ id: number; ruleIds: number[] }> } {
+  const keyOf = (codes: string[]) => [...new Set(codes)].sort().join('|');
+
+  const keys = [...new Set(spaces.map((s) => keyOf(s.ruleCodes)))].sort();
+  const byKey = new Map(keys.map((key, i) => [key, i]));
+
+  const combos = keys.map((key, id) => ({
+    id,
+    ruleIds: (key === '' ? [] : key.split('|'))
+      .map((code) => ruleIds.get(code))
+      .filter((v): v is number => v !== undefined),
+  }));
+
+  return { byKey, combos };
+}
+
+/** The combo key for one space, matching `buildCombos`. */
+export function comboKey(codes: string[]): string {
+  return [...new Set(codes)].sort().join('|');
+}

@@ -8,6 +8,7 @@ import {
   type Status,
   type TimeRange,
   compareStatus,
+  mostRestrictive,
 } from './types.ts';
 
 /**
@@ -215,6 +216,45 @@ export function statusByRuleId(
       continue;
     }
     out.set(rule.id, ruleActiveAt(rule, t) ? (ruleStatus(rule) ?? 'free') : 'free');
+  }
+  return out;
+}
+
+/**
+ * A set of rules that govern one feature together, named by a single integer.
+ *
+ * A paid bay can carry sixteen regulations at once, and a map `match`
+ * expression cannot evaluate a list. Distinct *combinations* are few — about
+ * 1,250 across Montreal — so each gets an id, and the feature carries that one
+ * number instead.
+ */
+export interface RuleCombo {
+  id: number;
+  ruleIds: number[];
+}
+
+/**
+ * Fold per-rule statuses into per-combination statuses.
+ *
+ * Runs immediately after `statusByRuleId` and is the same shape of operation:
+ * a few thousand map lookups, no per-feature work. A combination resolves to
+ * its most restrictive member, so a bay that is free under one regulation and
+ * towed under another reads as towed.
+ */
+export function statusByComboId(
+  statusByRule: Map<number, Status>,
+  combos: RuleCombo[],
+): Map<number, Status> {
+  const out = new Map<number, Status>();
+  for (const combo of combos) {
+    const statuses: Status[] = [];
+    for (const ruleId of combo.ruleIds) {
+      // A rule absent from the map is informational — it says nothing about
+      // whether you may park, so it must not drag the combination anywhere.
+      const status = statusByRule.get(ruleId);
+      if (status !== undefined) statuses.push(status);
+    }
+    out.set(combo.id, statuses.length > 0 ? mostRestrictive(statuses) : 'unknown');
   }
   return out;
 }

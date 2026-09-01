@@ -10,14 +10,14 @@ now, and tells you when that changes.
 
 ## Status
 
-Phases 1–2 complete — the data pipeline, rules engine, and the build artifacts
-the app will download. No UI yet.
+Phases 1–3 complete — the data pipeline, rules engine, build artifacts, and an
+Expo app that renders the whole city coloured by rule.
 
 | Phase | | |
 |---|---|---|
 | 1 | Ingestion, rule parser, rules engine | **done** |
 | 2 | Build artifacts (SQLite + PMTiles + manifest), daily CI | **done** |
-| 3 | Expo app shell, MapLibre + PMTiles | |
+| 3 | Expo app shell, MapLibre + PMTiles | **done** |
 | 4 | Live colouring, time scrubber, detail sheet | |
 | 5 | Search / Nearby / Settings, i18n, attribution | |
 | 6 | Background data refresh | |
@@ -33,7 +33,10 @@ packages/city-montreal/   Montreal adapters: the RPA sign-text parser and the
 scripts/ingest/           Build-time pipeline: fetch -> normalize -> parse.
                           dataset.ts is the single place the feeds are read
                           and filtered; everything else goes through it.
-scripts/build/            Artifacts: SQLite, GeoJSON -> PMTiles, manifest.
+scripts/build/            Artifacts: SQLite, GeoJSON -> PMTiles, manifest,
+                          the offline basemap extract, and asset staging.
+apps/mobile/              Expo app. MapLibre renders two PMTiles layers; the
+                          paint expression is compiled from the rules engine.
 docs/data-notes.md        What the upstream feeds actually contain, and the
                           traps in them. Read this before touching ingestion.
 ```
@@ -53,8 +56,17 @@ npm run build        # SQLite + GeoJSON + manifest into data/out/
 npm run tiles        # GeoJSON -> montreal.pmtiles (needs tippecanoe)
 ```
 
-Everything except `tiles` uses only Node builtins, so there is no install step.
-tippecanoe is a native binary; CI installs it, and locally it is optional.
+The pipeline itself uses only Node builtins. `tiles` needs tippecanoe and the
+offline basemap needs the pmtiles CLI — both are native binaries, installed in
+CI and optional locally (`brew install tippecanoe pmtiles`).
+
+To run the app:
+
+```bash
+scripts/build/basemap.sh        # ~59 MB Montreal extract from Protomaps
+scripts/build/stage-assets.sh   # copy artifacts into apps/mobile/assets/data/
+cd apps/mobile && npm run ios   # dev build; Expo Go cannot load MapLibre
+```
 
 `npm run normalize` prints a checklist and writes nothing if anything looks
 wrong:
@@ -89,6 +101,11 @@ would reshuffle them nightly, and tiles and dictionary are downloaded
 separately: a client pairing yesterday's tiles with today's dictionary would
 mis-colour the city rather than fail. The manifest's `ruleDictVersion` makes
 that mismatch loud.
+
+**A bay obeys many rules at once; the map matches on one integer.** A paid space
+can carry sixteen regulations, and a `match` expression cannot evaluate a list.
+Distinct *combinations* are few — 1,246 across the city — so each is named by a
+`comboId` and resolved to its most restrictive member right after the rules are.
 
 **An unreadable sign is never reported as a clear spot.** `unknown` outranks
 every other status when combining the signs on a pole, and any rule the parser

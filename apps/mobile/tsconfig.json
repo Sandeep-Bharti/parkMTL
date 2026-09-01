@@ -1,0 +1,12 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    // The workspace packages are consumed as TypeScript source — there is no
+    // build step anywhere in this repo — so their `.ts` import specifiers have
+    // to be allowed through.
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../../packages/*/src/**/*.ts"]
+}
