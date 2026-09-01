@@ -16,8 +16,22 @@ import { STATUS_COLOR, STATUS_LABEL } from './src/status-colors.ts';
 /** Downtown Montreal, where the signage is densest. */
 const START = { center: [-73.5673, 45.5019] as [number, number], zoom: 15 };
 
-/** Statuses worth showing in the Phase 3 legend. */
-const LEGEND = ['free', 'paid', 'limited', 'no_parking', 'unknown'] as const;
+/**
+ * Only the statuses this build can actually paint.
+ *
+ * `paid` is deliberately absent: `statusByRuleId` has no notion of tariffs, so
+ * it never returns it — paid-ness rides on the bay feature's own `paid` flag,
+ * which Phase 4 folds in. Listing a colour the map cannot produce would be a
+ * legend that lies.
+ */
+const LEGEND = [
+  'free',
+  'limited',
+  'permit_only',
+  'no_parking',
+  'no_standing',
+  'unknown',
+] as const;
 
 export default function App() {
   const dark = useColorScheme() === 'dark';

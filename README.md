@@ -68,6 +68,16 @@ scripts/build/stage-assets.sh   # copy artifacts into apps/mobile/assets/data/
 cd apps/mobile && npm run ios   # dev build; Expo Go cannot load MapLibre
 ```
 
+If the iOS build fails in `CompileAssetCatalogVariant` with *"No simulator
+runtime version … available to use with iphonesimulator SDK version"*, Xcode's
+SDK and its installed simulator runtime disagree. Point the SDK at the runtime
+you have:
+
+```bash
+xcrun simctl runtime match list                    # find the installed build
+xcrun simctl runtime match set iphoneos26.5 23E254a
+```
+
 `npm run normalize` prints a checklist and writes nothing if anything looks
 wrong:
 
