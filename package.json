@@ -1,0 +1,27 @@
+{
+  "name": "parkmtl",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Can I park here right now? — Montreal on-street parking, iOS and Android",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "fetch": "node --experimental-strip-types --no-warnings scripts/ingest/fetch.ts",
+    "fetch:force": "node --experimental-strip-types --no-warnings scripts/ingest/fetch.ts --force",
+    "normalize": "node --experimental-strip-types --no-warnings scripts/ingest/normalize.ts",
+    "corpus": "node --experimental-strip-types --no-warnings scripts/ingest/normalize.ts --corpus data/raw/rule-corpus.tsv",
+    "rules": "node --experimental-strip-types --no-warnings scripts/ingest/parse-rules.ts",
+    "rules:check": "node --experimental-strip-types --no-warnings scripts/ingest/parse-rules.ts --min 95",
+    "build": "node --experimental-strip-types --no-warnings scripts/build/build.ts",
+    "tiles": "scripts/build/tiles.sh data/out && node --experimental-strip-types --no-warnings scripts/build/stamp-tiles.ts",
+    "test": "node --experimental-strip-types --no-warnings --test 'packages/*/test/*.test.ts' 'scripts/*/test/*.test.ts'",
+    "ingest": "npm run fetch:force && npm run corpus && npm run rules:check"
+  }
+}

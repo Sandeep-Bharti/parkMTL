@@ -1,0 +1,8 @@
+{
+  "name": "@parkmtl/rules-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "City-neutral parking rule model and evaluator",
+  "exports": { ".": "./src/index.ts" }
+}

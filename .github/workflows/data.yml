@@ -1,0 +1,77 @@
+name: data
+
+# The city refreshes the signage feed daily. 10:00 UTC is early morning in
+# Montreal, after the upstream refresh and before most people go looking for
+# parking.
+on:
+  schedule:
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'packages/**'
+      - '.github/workflows/data.yml'
+
+permissions:
+  contents: write # to publish the release
+
+concurrency:
+  group: data
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install tippecanoe
+        run: sudo apt-get update && sudo apt-get install -y tippecanoe
+
+      # ~35 MB of CSV, of which signalisation_stationnement.csv is 31 MB. Keyed
+      # by date so a same-day re-run is free and the next day refetches.
+      - name: Cache upstream CSVs
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: raw-${{ github.run_id }}
+          restore-keys: raw-
+
+      - run: npm run fetch:force
+
+      - run: npm test
+
+      # Writes nothing and exits non-zero if the feed looks wrong, so a bad
+      # download cannot reach the artifacts below.
+      - name: Validate and build the rule corpus
+        run: npm run corpus
+
+      - run: npm run rules:check
+
+      - run: npm run build
+
+      - run: npm run tiles
+
+      - name: Read export date
+        id: meta
+        run: echo "date=$(node -p "require('./data/out/manifest.json').exportDate")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="data-${{ steps.meta.outputs.date }}"
+          FILES="data/out/montreal.pmtiles data/out/montreal.sqlite data/out/manifest.json"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" $FILES --clobber
+          else
+            gh release create "$TAG" $FILES \
+              --title "Data $TAG" \
+              --notes "Montreal parking data, export ${{ steps.meta.outputs.date }}."
+          fi

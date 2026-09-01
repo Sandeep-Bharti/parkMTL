@@ -1,0 +1,11 @@
+node_modules/
+# Upstream CSVs are large (30 MB+) and refreshed daily; always re-fetch.
+data/raw/
+# Build artifacts are published to GitHub Releases, never committed.
+data/out/
+*.geojsonl
+*.pmtiles
+*.sqlite
+.DS_Store
+.expo/
+dist/

@@ -1,0 +1,8 @@
+{
+  "name": "@parkmtl/city-montreal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Montreal adapters: Agence de mobilité durable + Ville de Montréal signage",
+  "exports": { ".": "./src/index.ts" }
+}
