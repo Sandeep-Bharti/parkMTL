@@ -10,18 +10,22 @@ now, and tells you when that changes.
 
 ## Status
 
-Phases 1–3 complete — the data pipeline, rules engine, build artifacts, and an
-Expo app that renders the whole city coloured by rule.
+Phases 1–6 complete. The app answers the question, in both languages, and
+refreshes its own data. Phase 7 is configured but needs developer accounts.
 
 | Phase | | |
 |---|---|---|
 | 1 | Ingestion, rule parser, rules engine | **done** |
 | 2 | Build artifacts (SQLite + PMTiles + manifest), daily CI | **done** |
 | 3 | Expo app shell, MapLibre + PMTiles | **done** |
-| 4 | Live colouring, time scrubber, detail sheet | |
-| 5 | Search / Nearby / Settings, i18n, attribution | |
-| 6 | Background data refresh | |
-| 7 | EAS build, TestFlight + Play internal | |
+| 4 | Live colouring, time scrubber, detail sheet | **done** |
+| 5 | Search / Nearby / Settings, i18n, attribution | **done** |
+| 6 | Background data refresh | **done** |
+| 7 | EAS build, TestFlight + Play internal | configured, not run |
+
+Phase 7 needs an Apple Developer membership, a Google Play account and an EAS
+login; see [docs/release.md](docs/release.md) for the runbook and for what is
+still open before a public release.
 
 ## Layout
 
