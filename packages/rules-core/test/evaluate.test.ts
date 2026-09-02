@@ -62,6 +62,40 @@ describe('toLocal', () => {
     assert.equal(january.minutes, 12 * 60); // EST, UTC-5
     assert.equal(july.minutes, 13 * 60); // EDT, UTC-4
   });
+
+  it('reuses one formatter per zone instead of building one per call', () => {
+    // assess() calls toLocal ~2,881 times for a single tap. Constructing an
+    // Intl.DateTimeFormat each time cost 19x the total runtime, which is the
+    // difference between an instant detail sheet and a laggy one on Hermes.
+    const original = Intl.DateTimeFormat;
+    let constructed = 0;
+
+    // @ts-expect-error — deliberately swapping the global for the duration.
+    Intl.DateTimeFormat = function (...args: unknown[]) {
+      constructed++;
+      // @ts-expect-error — forwarding to the real implementation.
+      return new original(...args);
+    };
+
+    try {
+      for (let i = 0; i < 50; i++) toLocal(new Date(2026, 5, 17, i % 24), TZ);
+    } finally {
+      Intl.DateTimeFormat = original;
+    }
+
+    // Zero is also correct: 'America/Montreal' is already cached by the tests
+    // above. What must not happen is one per call.
+    assert.ok(constructed <= 1, `built ${constructed} formatters across 50 calls`);
+  });
+
+  it('keeps zones separate despite the cache', () => {
+    const at = new Date('2026-07-15T17:00:00Z');
+    assert.equal(toLocal(at, 'America/Montreal').minutes, 13 * 60);
+    assert.equal(toLocal(at, 'UTC').minutes, 17 * 60);
+    assert.equal(toLocal(at, 'America/Vancouver').minutes, 10 * 60);
+    // Re-read the first zone to prove the cache did not hand back UTC's.
+    assert.equal(toLocal(at, 'America/Montreal').minutes, 13 * 60);
+  });
 });
 
 describe('inSeason', () => {
@@ -103,6 +137,18 @@ describe('clauseActiveAt', () => {
     assert.ok(clauseActiveAt(clause, toLocal(local(2026, 6, 17, 20), TZ)));
     assert.ok(clauseActiveAt(clause, toLocal(local(2026, 6, 17, 3), TZ)));
     assert.ok(!clauseActiveAt(clause, toLocal(local(2026, 6, 17, 12), TZ)));
+  });
+
+  it('reads 00:00-00:00 as all day, which is how the paid feed says "always"', () => {
+    // 480 reserved bays depend on this. A `>` rather than `>=` in the
+    // midnight-wrap check would turn every one of them into free parking.
+    const clause = { times: [{ start: 0, end: 0 }], weekdays: [] };
+    for (const hour of [0, 3, 12, 17, 23]) {
+      assert.ok(
+        clauseActiveAt(clause, toLocal(local(2026, 6, 17, hour), TZ)),
+        `should be in force at ${hour}:00`,
+      );
+    }
   });
 
   it('attributes the morning tail of a midnight-crossing range to the previous day', () => {
@@ -152,7 +198,20 @@ describe('ruleStatus', () => {
     assert.equal(ruleStatus(r), 'permit_only');
   });
 
+  it('treats a space reserved for someone as permit_only, not no parking', () => {
+    // Montreal's paid feed models reserved accessible and EV-charging bays as
+    // an all-day prohibition carrying an exemption. Reporting those as plain
+    // "no parking" is wrong for the very drivers they exist for, and paints
+    // 480 metered bays permanently red.
+    for (const kind of ['disabled', 'ev_charging'] as const) {
+      const r = rule({ exemptions: [{ kind, raw: 'Réservé' }] });
+      assert.equal(ruleStatus(r), 'permit_only', `${kind} should be permit_only`);
+    }
+  });
+
   it('keeps an unrelated exemption as a plain prohibition', () => {
+    // `\P EXCEPTE TAXIS` does not reserve the space for you unless you drive a
+    // taxi, and nothing here should soften it into "permit only".
     const r = rule({ exemptions: [{ kind: 'taxi', raw: 'TAXIS' }] });
     assert.equal(ruleStatus(r), 'no_parking');
   });

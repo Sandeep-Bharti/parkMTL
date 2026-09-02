@@ -1,11 +1,18 @@
 /**
- * The map style: Protomaps basemap underneath, our parking data on top.
+ * The map style and the paint that colours it.
  *
  * The colouring is the whole architecture in one expression. Rules are resolved
- * for an instant in JavaScript — about ten milliseconds for the entire city —
+ * for an instant in JavaScript — well under a millisecond for the entire city —
  * and the result is compiled into a MapLibre `match` on each feature's rule id.
  * The GPU does the rest, so there is no per-feature JavaScript and no marker
  * components, and moving through time is just a new expression.
+ *
+ * The basemap style and the data layers are built separately on purpose.
+ * `Map` stringifies `mapStyle` and the native side tears down every source when
+ * that string changes, so recolouring by rebuilding the style would reload the
+ * whole map on every scrubber tick — dropped sources, refetched glyphs, visible
+ * flicker. The style below is therefore constant, and the data layers are JSX
+ * whose `paint` prop changes in place.
  */
 
 import type {
@@ -19,7 +26,14 @@ import { TIME_ZONE } from '@parkmtl/city-montreal';
 import { FALLBACK_COLOR, STATUS_COLOR } from './status-colors.ts';
 
 const BASE_SOURCE = 'basemap';
-const DATA_SOURCE = 'parking';
+export const DATA_SOURCE = 'parking';
+
+/** Layer ids, exported because hit-testing queries by layer id. */
+export const POLE_LAYER = 'poles';
+export const BAY_LAYER = 'bays';
+
+/** Below this the dots are noise, and nothing is tappable. */
+export const DATA_MIN_ZOOM = 13;
 
 /**
  * Compile resolved statuses into a paint expression.
@@ -45,26 +59,14 @@ function colorExpression(
 export interface StyleInput {
   baseTilesUrl: string;
   dataTilesUrl: string;
-  rules: Rule[];
-  combos: RuleCombo[];
-  at: Date;
   dark: boolean;
 }
 
-export function buildStyle({
-  baseTilesUrl,
-  dataTilesUrl,
-  rules,
-  combos,
-  at,
-  dark,
-}: StyleInput): StyleSpecification {
-  const byRule = statusByRuleId(rules, at, TIME_ZONE);
-  const byCombo = statusByComboId(byRule, combos);
-
-  const poleColor = colorExpression('ruleId', byRule as Map<number, string>);
-  const bayColor = colorExpression('comboId', byCombo as Map<number, string>);
-
+/**
+ * The basemap and the two vector sources. Deliberately free of anything that
+ * changes with time, so this object can be built once and never replaced.
+ */
+export function buildStyle({ baseTilesUrl, dataTilesUrl, dark }: StyleInput): StyleSpecification {
   return {
     version: 8,
     // NOT yet offline: the tiles are local but label glyphs and sprites are
@@ -81,37 +83,41 @@ export function buildStyle({
         attribution: 'Ville de Montréal; Agence de mobilité durable (CC BY 4.0)',
       },
     },
-    layers: [
-      ...layers(BASE_SOURCE, namedFlavor(dark ? 'dark' : 'light'), { lang: 'fr' }),
+    layers: [...layers(BASE_SOURCE, namedFlavor(dark ? 'dark' : 'light'), { lang: 'fr' })],
+  };
+}
 
-      // Paid bays sit under the signs: a sign governs the whole curb, a bay is
-      // one space on it, so the sign is the thing you want on top when they
-      // land on the same pixel.
-      {
-        id: 'bays',
-        type: 'circle',
-        source: DATA_SOURCE,
-        'source-layer': 'bays',
-        minzoom: 13,
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2, 16, 5],
-          'circle-color': bayColor,
-          'circle-opacity': 0.85,
-        },
-      },
-      {
-        id: 'poles',
-        type: 'circle',
-        source: DATA_SOURCE,
-        'source-layer': 'poles',
-        minzoom: 13,
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2.5, 16, 6],
-          'circle-color': poleColor,
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 13, 0, 16, 1],
-          'circle-stroke-color': dark ? '#11151c' : '#ffffff',
-        },
-      },
-    ],
+export interface DataPaint {
+  poles: Record<string, unknown>;
+  bays: Record<string, unknown>;
+}
+
+/**
+ * Paint for both data layers at one instant.
+ *
+ * Called on every scrubber movement, so it must stay cheap: resolving the whole
+ * dictionary plus every rule combination is a few thousand map operations.
+ */
+export function buildDataPaint(
+  rules: Rule[],
+  combos: RuleCombo[],
+  at: Date,
+  dark: boolean,
+): DataPaint {
+  const byRule = statusByRuleId(rules, at, TIME_ZONE);
+  const byCombo = statusByComboId(byRule, combos);
+
+  return {
+    poles: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2.5, 16, 6, 18, 9],
+      'circle-color': colorExpression('ruleId', byRule as Map<number, string>),
+      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 13, 0, 16, 1],
+      'circle-stroke-color': dark ? '#11151c' : '#ffffff',
+    },
+    bays: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2, 16, 5, 18, 7],
+      'circle-color': colorExpression('comboId', byCombo as Map<number, string>),
+      'circle-opacity': 0.85,
+    },
   };
 }

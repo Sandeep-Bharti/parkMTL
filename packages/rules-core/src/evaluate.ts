@@ -1,6 +1,7 @@
 import {
   type Assessment,
   type Clause,
+  type ExemptionKind,
   type LocalTime,
   type MonthDay,
   type Rule,
@@ -12,22 +13,40 @@ import {
 } from './types.ts';
 
 /**
+ * Constructing an `Intl.DateTimeFormat` is expensive — far more so than using
+ * one. `assess` probes minute by minute across a 48h horizon, so a formatter
+ * built per call meant ~2,881 of them per assessment: tens of milliseconds on
+ * V8 and hundreds on Hermes, for one tap. There are only ever a handful of
+ * distinct time zones, so they are built once and kept.
+ */
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+function formatterFor(timeZone: string): Intl.DateTimeFormat {
+  let formatter = formatters.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      weekday: 'short',
+      hour12: false,
+    });
+    formatters.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
+/**
  * Convert an instant to wall-clock time in `timeZone`, DST included.
  *
  * Uses Intl rather than date arithmetic so that the twice-yearly Montreal DST
  * shift lands on the correct local hour without a tz database dependency.
  */
 export function toLocal(date: Date, timeZone: string): LocalTime {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    weekday: 'short',
-    hour12: false,
-  }).formatToParts(date);
+  const parts = formatterFor(timeZone).formatToParts(date);
 
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '0';
   const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -56,6 +75,16 @@ export function inSeason(season: Season, t: LocalTime): boolean {
   return from <= to ? now >= from && now <= to : now >= from || now <= to;
 }
 
+/**
+ * A range whose end is at or before its start runs past midnight.
+ *
+ * The equality case carries real weight: Montreal's paid feed encodes an
+ * all-day regulation as `00:00–00:00`, which lands here as a wrap covering the
+ * full 24 hours. That is the intended reading — reserved accessible and
+ * EV-charging bays are reserved around the clock — but it is load-bearing
+ * enough to say out loud, since `>` instead of `>=` would silently turn those
+ * spaces into unrestricted parking.
+ */
 function crossesMidnight(range: TimeRange): boolean {
   return range.end <= range.start;
 }
@@ -95,6 +124,16 @@ export function ruleActiveAt(rule: Rule, t: LocalTime): boolean {
 }
 
 /**
+ * Exemptions that reserve a space *for* someone rather than forbidding it to
+ * everyone. Whoever holds the permit may park; everyone else may not.
+ */
+const RESERVED_FOR: ReadonlySet<ExemptionKind> = new Set<ExemptionKind>([
+  'permit_resident',
+  'disabled',
+  'ev_charging',
+]);
+
+/**
  * Status this rule imposes on a driver holding no permit, while it is active.
  * Returns null for rules that impose nothing.
  */
@@ -106,10 +145,14 @@ export function ruleStatus(rule: Rule): Status | null {
     case 'no_standing':
       return 'no_standing';
     case 'no_parking':
-      // `\P EXCEPTE S3R` is the common residential case. Calling it
-      // `permit_only` rather than `no_parking` is both more accurate and more
-      // useful — it tells a permit holder they may in fact park.
-      return rule.exemptions.some((e) => e.kind === 'permit_resident')
+      // A restriction that names who *may* park is not a blanket prohibition.
+      // `\P EXCEPTE S3R` is the common residential case, and Montreal's paid
+      // feed encodes reserved accessible and EV-charging bays the same way.
+      // Calling these `permit_only` rather than `no_parking` is both more
+      // accurate and more useful: it tells the driver who holds the permit —
+      // or is charging — that the space is in fact theirs, while still keeping
+      // everyone else out of it.
+      return rule.exemptions.some((e) => RESERVED_FOR.has(e.kind))
         ? 'permit_only'
         : 'no_parking';
     case 'parking_allowed':

@@ -1,7 +1,7 @@
 /**
- * Validate the map style the app actually hands to MapLibre.
+ * Validate the map style and the paint the app hands to MapLibre.
  *
- * The style is generated, not written by hand: its paint properties are
+ * The paint is generated, not written by hand: its colour properties are
  * compiled from the rule dictionary at runtime. A malformed `match` expression
  * would not fail until the map tried to render, so it is checked here against
  * the MapLibre style specification, using the real artifacts from data/out.
@@ -15,7 +15,14 @@ import { describe, it } from 'node:test';
 
 import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
 import type { Rule, RuleCombo } from '../../../packages/rules-core/src/index.ts';
-import { buildStyle } from '../../../apps/mobile/src/style.ts';
+import {
+  BAY_LAYER,
+  DATA_MIN_ZOOM,
+  DATA_SOURCE,
+  POLE_LAYER,
+  buildDataPaint,
+  buildStyle,
+} from '../../../apps/mobile/src/style.ts';
 
 const DB = fileURLToPath(new URL('../../../data/out/montreal.sqlite', import.meta.url));
 
@@ -38,30 +45,59 @@ function load(): { rules: Rule[]; combos: RuleCombo[] } {
   return { rules, combos: [...byCombo].map(([id, ruleIds]) => ({ id, ruleIds })) };
 }
 
-const style = (over: Partial<Parameters<typeof buildStyle>[0]> = {}) =>
+const style = (dark = false) =>
   buildStyle({
     baseTilesUrl: 'pmtiles://file:///tmp/base.pmtiles',
     dataTilesUrl: 'pmtiles://file:///tmp/data.pmtiles',
-    rules: [],
-    combos: [],
-    at: new Date('2026-09-07T15:00:00Z'),
-    dark: false,
-    ...over,
+    dark,
   });
+
+const AT = new Date('2026-09-07T15:00:00Z');
+
+/**
+ * The app declares the data layers as JSX children, so the spec validator never
+ * sees them in the style. Re-attach them here so the paint is still validated
+ * exactly as MapLibre will receive it.
+ */
+function styleWithDataLayers(rules: Rule[], combos: RuleCombo[], dark = false) {
+  const base = style(dark);
+  const paint = buildDataPaint(rules, combos, AT, dark);
+  return {
+    ...base,
+    layers: [
+      ...base.layers,
+      {
+        id: BAY_LAYER,
+        type: 'circle',
+        source: DATA_SOURCE,
+        'source-layer': 'bays',
+        minzoom: DATA_MIN_ZOOM,
+        paint: paint.bays,
+      },
+      {
+        id: POLE_LAYER,
+        type: 'circle',
+        source: DATA_SOURCE,
+        'source-layer': 'poles',
+        minzoom: DATA_MIN_ZOOM,
+        paint: paint.poles,
+      },
+    ],
+  };
+}
 
 describe('buildStyle', () => {
-  it('produces a spec-valid style with an empty dictionary', () => {
-    // `match` with no branches is invalid, so the degenerate case must degrade
-    // to a flat colour rather than emit a broken expression.
+  it('produces a spec-valid basemap style', () => {
     assert.deepEqual(validateStyleMin(style() as never), []);
+    assert.deepEqual(validateStyleMin(style(true) as never), []);
   });
 
-  it('names both data layers and points them at the right source layers', () => {
-    const s = style() as { layers: Array<{ id: string; 'source-layer'?: string }> };
-    const poles = s.layers.find((l) => l.id === 'poles');
-    const bays = s.layers.find((l) => l.id === 'bays');
-    assert.equal(poles?.['source-layer'], 'poles');
-    assert.equal(bays?.['source-layer'], 'bays');
+  it('carries no time-dependent layers, so it never needs rebuilding', () => {
+    // Rebuilding the style object tears down every source natively, which is
+    // why the data layers live in JSX and this must stay constant.
+    const s = style() as { layers: Array<{ id: string }> };
+    assert.equal(s.layers.find((l) => l.id === POLE_LAYER), undefined);
+    assert.equal(s.layers.find((l) => l.id === BAY_LAYER), undefined);
   });
 
   it('keeps the pmtiles:// URLs fully qualified, as MapLibre Native requires', () => {
@@ -70,36 +106,45 @@ describe('buildStyle', () => {
       assert.match(source.url, /^pmtiles:\/\/file:\/\/\//);
     }
   });
+});
 
-  it('renders both themes', () => {
-    assert.deepEqual(validateStyleMin(style({ dark: true }) as never), []);
+describe('buildDataPaint', () => {
+  it('degrades to a flat colour when the dictionary is empty', () => {
+    // `match` with no branches is invalid, so the degenerate case must not emit
+    // an expression at all.
+    const paint = buildDataPaint([], [], AT, false);
+    assert.match(String(paint.poles['circle-color']), /^#[0-9a-f]{6}$/i);
+    assert.deepEqual(validateStyleMin(styleWithDataLayers([], []) as never), []);
   });
 });
 
 // The real dictionary is only present after `npm run build`; skip rather than
 // fail so a fresh checkout can still run the suite.
-describe('buildStyle with the real dictionary', { skip: !existsSync(DB) }, () => {
-  it('compiles ~2,000 rules into a spec-valid style', () => {
+describe('buildDataPaint with the real dictionary', { skip: !existsSync(DB) }, () => {
+  it('compiles ~2,000 rules into spec-valid paint', () => {
     const { rules, combos } = load();
     assert.ok(rules.length > 1000, `expected a full dictionary, got ${rules.length}`);
-
-    const s = style({ rules, combos });
-    assert.deepEqual(validateStyleMin(s as never), []);
+    assert.deepEqual(validateStyleMin(styleWithDataLayers(rules, combos) as never), []);
   });
 
   it('paints every resolved rule, and keeps a fallback for the rest', () => {
     const { rules, combos } = load();
-    const s = style({ rules, combos }) as {
-      layers: Array<{ id: string; paint?: Record<string, unknown> }>;
-    };
+    const expr = buildDataPaint(rules, combos, AT, false).poles['circle-color'] as unknown[];
 
-    const expr = s.layers.find((l) => l.id === 'poles')!.paint!['circle-color'] as unknown[];
     assert.equal(expr[0], 'match');
     assert.deepEqual(expr[1], ['get', 'ruleId']);
 
-    // ['match', input, k, v, k, v, …, fallback] — so an odd tail means the
+    // ['match', input, k, v, k, v, …, fallback] — an odd tail means the
     // fallback is present, which is what stops an unknown id rendering as null.
     assert.equal((expr.length - 3) % 2, 0);
     assert.match(String(expr[expr.length - 1]), /^#[0-9a-f]{6}$/i);
+  });
+
+  it('repaints to different colours at a different instant', () => {
+    // The scrubber's whole premise: the same features, a different verdict.
+    const { rules, combos } = load();
+    const noon = buildDataPaint(rules, combos, new Date('2026-09-07T16:00:00Z'), false);
+    const threeAm = buildDataPaint(rules, combos, new Date('2026-09-07T07:00:00Z'), false);
+    assert.notDeepEqual(noon.poles['circle-color'], threeAm.poles['circle-color']);
   });
 });

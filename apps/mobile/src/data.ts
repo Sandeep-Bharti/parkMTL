@@ -35,6 +35,14 @@ export interface Artifacts {
   rules: Rule[];
   combos: RuleCombo[];
   meta: Record<string, string>;
+  /**
+   * Left open for the lifetime of the app.
+   *
+   * The rule dictionary is small enough to hold in memory, but the per-pole
+   * panel list and the tariff tables are not — a detail sheet queries them on
+   * every tap, and reopening a 15 MB database each time would be absurd.
+   */
+  db: SQLite.SQLiteDatabase;
 }
 
 /**
@@ -115,8 +123,6 @@ export async function loadArtifacts(): Promise<Artifacts> {
   );
   const meta = Object.fromEntries(metaRows.map((r) => [r.key, r.value]));
 
-  await db.closeAsync();
-
   return {
     // MapLibre Native needs the URL inside pmtiles:// fully qualified.
     dataTilesUrl: `pmtiles://file://${dataTiles.replace(/^file:\/\//, '')}`,
@@ -124,5 +130,118 @@ export async function loadArtifacts(): Promise<Artifacts> {
     rules,
     combos,
     meta,
+    db,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Detail queries
+// ---------------------------------------------------------------------------
+
+export interface PoleSign {
+  position: number;
+  ruleId: number;
+  arrow: number;
+  isSubPanel: boolean;
+  raw: string;
+  confidence: string;
+}
+
+export interface PoleDetail {
+  id: string;
+  borough: string | null;
+  signs: PoleSign[];
+}
+
+/**
+ * Everything on one pole, top panel first.
+ *
+ * The tiles carry one feature per sign but omit sub-panels, so the panel list
+ * has to come from here: a `PANONCEAU` modifies the panel above it and reading
+ * it standalone would invent a rule nobody signed.
+ */
+export async function poleDetail(
+  db: SQLite.SQLiteDatabase,
+  poleId: string,
+): Promise<PoleDetail | null> {
+  const pole = await db.getFirstAsync<{ id: string; borough: string | null }>(
+    'SELECT id, borough FROM poles WHERE id = ?',
+    poleId,
+  );
+  if (!pole) return null;
+
+  const rows = await db.getAllAsync<{
+    position: number;
+    rule_id: number;
+    arrow: number;
+    is_subpanel: number;
+    raw: string;
+    confidence: string;
+  }>(
+    `SELECT s.position, s.rule_id, s.arrow, s.is_subpanel, r.raw, r.confidence
+       FROM signs s JOIN rules r ON r.id = s.rule_id
+      WHERE s.pole_id = ?
+      ORDER BY s.position`,
+    poleId,
+  );
+
+  return {
+    id: pole.id,
+    borough: pole.borough,
+    signs: rows.map((r) => ({
+      position: r.position,
+      ruleId: r.rule_id,
+      arrow: r.arrow,
+      isSubPanel: r.is_subpanel === 1,
+      raw: r.raw,
+      confidence: r.confidence,
+    })),
+  };
+}
+
+export interface SpaceDetail {
+  id: string;
+  street: string | null;
+  accessible: boolean;
+  hourlyRateCents: number | null;
+  maxTariffCents: number | null;
+  exploitation: string | null;
+  paired: string | null;
+  comboId: number;
+  ruleIds: number[];
+}
+
+/** A paid bay: its tariff, and the regulations its combo expands to. */
+export async function spaceDetail(
+  db: SQLite.SQLiteDatabase,
+  spaceId: string,
+): Promise<SpaceDetail | null> {
+  const row = await db.getFirstAsync<{
+    id: string;
+    street: string | null;
+    accessible: number;
+    hourly_rate_cents: number | null;
+    max_tariff_cents: number | null;
+    exploitation: string | null;
+    paired: string | null;
+    combo_id: number;
+  }>('SELECT * FROM spaces WHERE id = ?', spaceId);
+  if (!row) return null;
+
+  const rules = await db.getAllAsync<{ rule_id: number }>(
+    'SELECT rule_id FROM combo_rules WHERE combo_id = ?',
+    row.combo_id,
+  );
+
+  return {
+    id: row.id,
+    street: row.street,
+    accessible: row.accessible === 1,
+    hourlyRateCents: row.hourly_rate_cents,
+    maxTariffCents: row.max_tariff_cents,
+    exploitation: row.exploitation,
+    paired: row.paired,
+    comboId: row.combo_id,
+    ruleIds: rules.map((r) => r.rule_id),
   };
 }

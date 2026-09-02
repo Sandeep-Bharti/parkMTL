@@ -21,7 +21,7 @@
     "rules:check": "node --experimental-strip-types --no-warnings scripts/ingest/parse-rules.ts --min 95",
     "build": "node --experimental-strip-types --no-warnings scripts/build/build.ts",
     "tiles": "scripts/build/tiles.sh data/out && node --experimental-strip-types --no-warnings scripts/build/stamp-tiles.ts",
-    "test": "node --experimental-strip-types --no-warnings --test 'packages/*/test/*.test.ts' 'scripts/*/test/*.test.ts'",
+    "test": "node --experimental-strip-types --no-warnings --test 'packages/*/test/*.test.ts' 'scripts/*/test/*.test.ts' 'apps/*/test/*.test.ts'",
     "ingest": "npm run fetch:force && npm run corpus && npm run rules:check"
   }
 }

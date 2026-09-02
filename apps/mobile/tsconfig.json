@@ -8,5 +8,7 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["**/*.ts", "**/*.tsx", "../../packages/*/src/**/*.ts"]
+  // `test/` runs under `node --test` with Node globals this config does not
+  // model; it is typechecked by actually running it.
+  "include": ["*.tsx", "src/**/*.ts", "src/**/*.tsx", "../../packages/*/src/**/*.ts"]
 }
