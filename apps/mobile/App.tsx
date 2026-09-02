@@ -8,8 +8,10 @@ import {
   View,
   useColorScheme,
 } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { getLocales } from 'expo-localization';
+import * as Haptics from 'expo-haptics';
 import {
   Camera,
   Layer,
@@ -23,7 +25,8 @@ import {
   type PressEvent,
 } from '@maplibre/maplibre-react-native';
 
-import type { Rule } from '@parkmtl/rules-core';
+import { assess, type Rule } from '@parkmtl/rules-core';
+import { TIME_ZONE } from '@parkmtl/city-montreal';
 
 import {
   DATA_DIR,
@@ -40,49 +43,56 @@ import {
   buildDataPaint,
   buildStyle,
 } from './src/style.ts';
-import { STATUS_COLOR, statusLabel } from './src/status-colors.ts';
 import { pickLanguage, translatorFor, type Language } from './src/i18n.ts';
 import { DetailSheet, type Selection } from './src/DetailSheet.tsx';
 import { TimeScrubber } from './src/TimeScrubber.tsx';
 import { SearchBar } from './src/SearchBar.tsx';
 import { SettingsSheet, type UpdateState } from './src/SettingsSheet.tsx';
+import { AnswerCard, type CentreAnswer } from './src/AnswerCard.tsx';
+import { Onboarding } from './src/Onboarding.tsx';
 import { loadPlaces, type Place } from './src/search.ts';
 import { DATA_BASE_URL, checkForUpdate } from './src/updates.ts';
 import { registerRefresh } from './src/background.ts';
+import { hasOnboarded, setOnboarded } from './src/prefs.ts';
+import { elevation, radius, space, surface, type } from './src/theme.ts';
 
 /** Downtown Montreal, where the signage is densest. */
-const START = { center: [-73.5673, 45.5019] as [number, number], zoom: 15 };
-
-/** Only the statuses this build can actually paint — see the note in style.ts. */
-const LEGEND = [
-  'free',
-  'limited',
-  'permit_only',
-  'no_parking',
-  'no_standing',
-  'unknown',
-] as const;
+const START = { center: [-73.5673, 45.5019] as [number, number], zoom: 16 };
 
 /**
- * Half-width of the tap hit box, in points.
+ * Half-width of the hit box, in points.
  *
- * The dots are 2-6 px wide. An exact-pixel hit test misses almost every tap, so
- * the query is a rect around the touch and the nearest result wins.
+ * The dots are a few pixels wide. An exact-pixel query misses almost every tap
+ * and every centre probe, so both use a rect and take the nearest result.
  */
 const TAP_SLOP = 22;
+const CENTRE_SLOP = 34;
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <Parkmtl />
+    </SafeAreaProvider>
+  );
+}
+
+function Parkmtl() {
   const dark = useColorScheme() === 'dark';
+  const insets = useSafeAreaInsets();
+  const s = surface(dark);
+
   const [artifacts, setArtifacts] = useState<Artifacts | null>(null);
   const [places, setPlaces] = useState<Place[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [offsetHours, setOffsetHours] = useState(0);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [legendOpen, setLegendOpen] = useState(false);
   const [tracking, setTracking] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [scrubberOpen, setScrubberOpen] = useState(false);
   const [languageOverride, setLanguageOverride] = useState<Language | null>(null);
   const [updateState, setUpdateState] = useState<UpdateState>('idle');
+  const [onboarding, setOnboarding] = useState(false);
+  const [centre, setCentre] = useState<CentreAnswer | null>(null);
 
   const mapRef = useRef<MapRef>(null);
   const cameraRef = useRef<CameraRef>(null);
@@ -100,6 +110,7 @@ export default function App() {
         if (cancelled) return;
         setArtifacts(a);
         setPlaces(await loadPlaces(a.db));
+        setOnboarding(!(await hasOnboarded()));
       })
       .catch((e) => !cancelled && setError(String(e?.message ?? e)));
     void registerRefresh();
@@ -108,16 +119,12 @@ export default function App() {
     };
   }, []);
 
-  // The instant the map is painted for. `now` is fixed at load so dragging the
-  // scrubber is reproducible; the offset moves relative to it.
   const now = useMemo(() => new Date(), [artifacts]);
   const at = useMemo(
     () => new Date(now.getTime() + offsetHours * 3_600_000),
     [now, offsetHours],
   );
 
-  // Rebuilt only when the theme or language changes — each rebuild costs a
-  // native style reload, which is fine for a setting and not for the scrubber.
   const style = useMemo(() => {
     if (!artifacts) return null;
     return buildStyle({
@@ -140,60 +147,103 @@ export default function App() {
     return map;
   }, [artifacts]);
 
-  const onPress = useCallback(
-    async (event: NativeSyntheticEvent<PressEvent>) => {
-      if (!artifacts || !mapRef.current) return;
-      setSettingsOpen(false);
-
-      const [x, y] = event.nativeEvent.point;
+  /**
+   * Resolve whatever the map has under a screen point into a selection.
+   *
+   * Poles and bays are queried separately because returned features carry no
+   * source-layer identity. A pole wins a tie: it governs the whole curb, where
+   * a bay is one space on it.
+   */
+  const resolveAt = useCallback(
+    async (point: [number, number], slop: number): Promise<Selection | null> => {
+      if (!artifacts || !mapRef.current) return null;
+      const [x, y] = point;
       const rect: [[number, number], [number, number]] = [
-        [x - TAP_SLOP, y - TAP_SLOP],
-        [x + TAP_SLOP, y + TAP_SLOP],
+        [x - slop, y - slop],
+        [x + slop, y + slop],
       ];
 
-      // Queried separately because returned features carry no source-layer
-      // identity — there is no way to tell a pole from a bay in one result set.
       const [poles, bays] = await Promise.all([
         mapRef.current.queryRenderedFeatures(rect, { layers: [POLE_LAYER] }),
         mapRef.current.queryRenderedFeatures(rect, { layers: [BAY_LAYER] }),
       ]);
 
-      // A pole carries one feature per sign, all at the same point; the bay
-      // layer sits underneath, so a sign wins a tie.
-      const poleId = poles[0]?.properties?.pole as string | undefined;
+      const poleId = poles[0]?.properties?.pole;
       if (poleId != null) {
         const detail = await poleDetail(artifacts.db, String(poleId));
-        if (!detail) return;
-        setSelection({
+        if (!detail) return null;
+        return {
           kind: 'pole',
           pole: detail,
           // Sub-panels modify the panel above and are not rules in their own
           // right, so they must not be fed to the evaluator.
           rules: detail.signs
-            .filter((s) => !s.isSubPanel)
-            .map((s) => rulesById.get(s.ruleId))
+            .filter((sign) => !sign.isSubPanel)
+            .map((sign) => rulesById.get(sign.ruleId))
             .filter((r): r is Rule => r !== undefined),
-        });
-        return;
+        };
       }
 
-      const spaceId = bays[0]?.properties?.space as string | undefined;
+      const spaceId = bays[0]?.properties?.space;
       if (spaceId != null) {
         const detail = await spaceDetail(artifacts.db, String(spaceId));
-        if (!detail) return;
-        setSelection({
+        if (!detail) return null;
+        return {
           kind: 'bay',
           space: detail,
           rules: detail.ruleIds
             .map((id) => rulesById.get(id))
             .filter((r): r is Rule => r !== undefined),
-        });
-        return;
+        };
       }
 
-      setSelection(null);
+      return null;
     },
     [artifacts, rulesById],
+  );
+
+  /** Turn a selection into the one-line verdict the answer card shows. */
+  const answerFrom = useCallback(
+    (found: Selection | null): CentreAnswer | null => {
+      if (!found) return null;
+      return {
+        kind: found.kind,
+        // Not `paid: kind === 'bay'`: a meter is only running during its
+        // tariff hours, and claiming otherwise tells people to pay overnight
+        // when they need not. The tariff is shown as a fact in the sheet.
+        assessment: assess(found.rules, at, { timeZone: TIME_ZONE }),
+        where: found.space?.street ?? found.pole?.borough ?? null,
+      };
+    },
+    [at],
+  );
+
+  /**
+   * Re-answer for the map centre whenever it settles.
+   *
+   * Debounced by the event itself — `onRegionDidChange` fires once the gesture
+   * ends, not during it — so panning stays smooth.
+   */
+  const onRegionDidChange = useCallback(async () => {
+    if (!mapRef.current) return;
+    const centrePoint = await mapRef.current.getCenter();
+    const pixel = await mapRef.current.project(centrePoint);
+    setCentre(answerFrom(await resolveAt(pixel as [number, number], CENTRE_SLOP)));
+  }, [answerFrom, resolveAt]);
+
+  // Keep the centre answer honest when time moves under a stationary map.
+  useEffect(() => {
+    if (artifacts) void onRegionDidChange();
+  }, [artifacts, at]);
+
+  const onPress = useCallback(
+    async (event: NativeSyntheticEvent<PressEvent>) => {
+      setSettingsOpen(false);
+      const found = await resolveAt(event.nativeEvent.point as [number, number], TAP_SLOP);
+      if (found) void Haptics.selectionAsync();
+      setSelection(found);
+    },
+    [resolveAt],
   );
 
   const locate = useCallback(async () => {
@@ -220,8 +270,11 @@ export default function App() {
 
   const onCheckUpdates = useCallback(async () => {
     setUpdateState('checking');
-    const current = artifacts?.meta.ruleDictVersion ?? null;
-    const outcome = await checkForUpdate(DATA_BASE_URL, DATA_DIR, current);
+    const outcome = await checkForUpdate(
+      DATA_BASE_URL,
+      DATA_DIR,
+      artifacts?.meta.ruleDictVersion ?? null,
+    );
     setUpdateState(
       outcome.status === 'updated'
         ? 'updated'
@@ -231,20 +284,28 @@ export default function App() {
     );
   }, [artifacts]);
 
+  const finishOnboarding = useCallback(
+    async (allowLocation: boolean) => {
+      setOnboarding(false);
+      await setOnboarded();
+      if (allowLocation) void locate();
+    },
+    [locate],
+  );
+
   if (error) {
     return (
-      <View style={[styles.centre, dark && styles.centreDark]}>
-        <Text style={[styles.error, dark && styles.textDark]}>Could not load parking data</Text>
-        <Text style={[styles.detail, dark && styles.textDark]}>{error}</Text>
+      <View style={[styles.centre, { backgroundColor: dark ? '#11151c' : '#fff' }]}>
+        <Text style={[type.title, { color: s.text }]}>Could not load parking data</Text>
+        <Text style={[type.caption, styles.errorDetail, { color: s.textDim }]}>{error}</Text>
       </View>
     );
   }
 
   if (!style || !paint || !artifacts) {
     return (
-      <View style={[styles.centre, dark && styles.centreDark]}>
-        <ActivityIndicator />
-        <Text style={[styles.detail, dark && styles.textDark]}>…</Text>
+      <View style={[styles.centre, { backgroundColor: dark ? '#11151c' : '#fff' }]}>
+        <ActivityIndicator color={s.accent} />
       </View>
     );
   }
@@ -258,16 +319,18 @@ export default function App() {
         style={styles.map}
         mapStyle={style}
         onPress={onPress}
+        onRegionDidChange={onRegionDidChange}
         attribution
-        compass
+        attributionPosition={{ top: 8, right: 8 }}
+        compass={false}
+        logo={false}
       >
         <Camera
           ref={cameraRef}
           initialViewState={{ center: START.center, zoom: START.zoom }}
         />
 
-        {/* Bays sit under the signs: a sign governs the whole curb, a bay is one
-            space on it, so the sign wins when they land on the same pixel. */}
+        {/* Bays under signs: a sign governs the curb, a bay is one space on it. */}
         <Layer
           id={BAY_LAYER}
           type="circle"
@@ -284,14 +347,39 @@ export default function App() {
           minzoom={DATA_MIN_ZOOM}
           paint={paint.poles}
         />
+        {/* A ring on the tapped feature. Updating a filter mutates the live
+            layer, so this costs nothing and never reloads the style. */}
+        <Layer
+          id="pole-selected"
+          type="circle"
+          source={DATA_SOURCE}
+          source-layer="poles"
+          minzoom={DATA_MIN_ZOOM}
+          filter={['==', ['get', 'pole'], selection?.pole?.id ?? '']}
+          paint={{
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 10, 18, 18],
+            'circle-color': 'transparent',
+            'circle-stroke-width': 2.5,
+            'circle-stroke-color': s.accent,
+          }}
+        />
 
         {tracking && <UserLocation />}
       </MapView>
+
+      {/* The reticle: what "here" means for the answer card. Hidden while a
+          sheet is up, since the answer on screen is then a specific feature. */}
+      {!sheetOpen && (
+        <View pointerEvents="none" style={styles.reticleWrap}>
+          <View style={[styles.reticle, { borderColor: s.accent }]} />
+        </View>
+      )}
 
       <SearchBar
         places={places}
         t={t}
         dark={dark}
+        top={insets.top + space.sm}
         onSelect={goTo}
         onOpenSettings={() => {
           setSelection(null);
@@ -300,50 +388,54 @@ export default function App() {
       />
 
       <Pressable
-        style={[styles.locate, dark && styles.locateDark]}
+        style={[
+          styles.locate,
+          { top: insets.top + space.sm + 52, backgroundColor: s.card },
+          elevation.low,
+        ]}
         onPress={locate}
         accessibilityLabel="Show my location"
       >
-        <Text style={styles.locateIcon}>◎</Text>
-      </Pressable>
-
-      <Pressable
-        style={[styles.legend, dark && styles.legendDark]}
-        onPress={() => setLegendOpen((v) => !v)}
-      >
-        {legendOpen ? (
-          <>
-            {LEGEND.map((status) => (
-              <View key={status} style={styles.legendRow}>
-                <View style={[styles.swatch, { backgroundColor: STATUS_COLOR[status] }]} />
-                <Text style={[styles.legendText, dark && styles.textDark]}>
-                  {statusLabel(status, t)}
-                </Text>
-              </View>
-            ))}
-          </>
-        ) : (
-          <View style={styles.legendRow}>
-            {LEGEND.map((status) => (
-              <View
-                key={status}
-                style={[styles.swatchSmall, { backgroundColor: STATUS_COLOR[status] }]}
-              />
-            ))}
-            <Text style={[styles.legendText, dark && styles.textDark]}>{t('legend.title')}</Text>
-          </View>
-        )}
+        <Text style={[styles.locateIcon, { color: s.accent }]}>◎</Text>
       </Pressable>
 
       {!sheetOpen && (
-        <TimeScrubber
-          offsetHours={offsetHours}
-          onChange={setOffsetHours}
-          now={now}
-          t={t}
-          lang={lang}
-          dark={dark}
-        />
+        <View style={[styles.dock, { bottom: Math.max(insets.bottom, space.md) }]}>
+          <AnswerCard
+            answer={centre}
+            at={at}
+            now={now}
+            t={t}
+            lang={lang}
+            dark={dark}
+            scrubberOpen={scrubberOpen}
+            onToggleScrubber={() => setScrubberOpen((v) => !v)}
+            onExpand={async () => {
+              const found = await resolveAt(
+                (await mapRef.current!.project(await mapRef.current!.getCenter())) as [
+                  number,
+                  number,
+                ],
+                CENTRE_SLOP,
+              );
+              if (found) {
+                void Haptics.selectionAsync();
+                setSelection(found);
+              }
+            }}
+          >
+            {scrubberOpen && (
+              <TimeScrubber
+                offsetHours={offsetHours}
+                onChange={setOffsetHours}
+                now={now}
+                t={t}
+                lang={lang}
+                dark={dark}
+              />
+            )}
+          </AnswerCard>
+        </View>
       )}
 
       {selection && (
@@ -372,11 +464,7 @@ export default function App() {
         />
       )}
 
-      {!sheetOpen && (
-        <View style={styles.disclaimer} pointerEvents="none">
-          <Text style={styles.disclaimerText}>{t('disclaimer.short')}</Text>
-        </View>
-      )}
+      {onboarding && <Onboarding t={t} dark={dark} onDone={finishOnboarding} />}
 
       <StatusBar style={dark ? 'light' : 'dark'} />
     </View>
@@ -386,58 +474,35 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   map: { flex: 1 },
-  centre: {
-    flex: 1,
+  centre: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.sm },
+  errorDetail: { textAlign: 'center', paddingHorizontal: space.xl },
+  reticleWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#ffffff',
+    // Lifted so the reticle sits above the answer card rather than behind it.
+    marginBottom: 150,
   },
-  centreDark: { backgroundColor: '#11151c' },
-  error: { fontSize: 16, fontWeight: '600' },
-  detail: { fontSize: 13, opacity: 0.7, textAlign: 'center', paddingHorizontal: 24 },
-  textDark: { color: '#e8eaed' },
-  legend: {
-    position: 'absolute',
-    top: 112,
-    left: 12,
-    padding: 9,
-    borderRadius: 10,
-    gap: 5,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+  reticle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2.5,
+    backgroundColor: 'transparent',
   },
-  legendDark: { backgroundColor: 'rgba(17,21,28,0.92)' },
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  swatch: { width: 11, height: 11, borderRadius: 6 },
-  swatchSmall: { width: 9, height: 9, borderRadius: 5 },
-  legendText: { fontSize: 12 },
   locate: {
     position: 'absolute',
-    right: 12,
-    top: 58,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    right: space.md,
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
   },
-  locateDark: { backgroundColor: 'rgba(22,26,33,0.96)' },
-  locateIcon: { fontSize: 20, color: '#2f6fd0' },
-  disclaimer: {
-    position: 'absolute',
-    bottom: 118,
-    left: 12,
-    right: 12,
-    paddingVertical: 5,
-    paddingHorizontal: 11,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  disclaimerText: { color: '#ffffff', fontSize: 10, textAlign: 'center' },
+  locateIcon: { fontSize: 21 },
+  dock: { position: 'absolute', left: 0, right: 0 },
 });

@@ -20,10 +20,17 @@ import type {
   StyleSpecification,
 } from '@maplibre/maplibre-gl-style-spec';
 import { layers, namedFlavor } from '@protomaps/basemaps';
-import { statusByComboId, statusByRuleId, type Rule, type RuleCombo } from '@parkmtl/rules-core';
+import {
+  statusByComboId,
+  statusByRuleId,
+  type Rule,
+  type RuleCombo,
+  type Status,
+} from '@parkmtl/rules-core';
 import { TIME_ZONE } from '@parkmtl/city-montreal';
 
-import { FALLBACK_COLOR, STATUS_COLOR } from './status-colors.ts';
+import { FALLBACK_COLOR, STATUS_COLOR, emphasisFor } from './status-colors.ts';
+import { surface } from './theme.ts';
 
 const BASE_SOURCE = 'basemap';
 export const DATA_SOURCE = 'parking';
@@ -36,24 +43,81 @@ export const BAY_LAYER = 'bays';
 export const DATA_MIN_ZOOM = 13;
 
 /**
- * Compile resolved statuses into a paint expression.
+ * Compile an id → value mapping into a `match`, grouped by value.
  *
- * MapLibre requires at least one branch, and `match` with an empty body is
- * invalid — so a dictionary that somehow resolved to nothing degrades to a flat
- * fallback rather than producing a broken style.
+ * `match` accepts an array of inputs per branch, so two thousand ids sharing
+ * seven statuses become seven branches rather than two thousand pairs. The
+ * largest group becomes the fallback and is not listed at all. This matters
+ * because these expressions are rebuilt and pushed across the bridge on every
+ * scrubber movement.
+ *
+ * MapLibre rejects a `match` with no branches, so a mapping that collapses to a
+ * single value degrades to that constant instead.
  */
-function colorExpression(
+function matchByValue<T extends string | number>(
   key: string,
-  statuses: Map<number, string>,
-): DataDrivenPropertyValueSpecification<string> {
-  if (statuses.size === 0) return FALLBACK_COLOR;
+  entries: Iterable<[number, T]>,
+  fallback: T,
+): T | unknown[] {
+  const byValue = new Map<T, number[]>();
+  for (const [id, value] of entries) {
+    const ids = byValue.get(value);
+    if (ids) ids.push(id);
+    else byValue.set(value, [id]);
+  }
+  if (byValue.size === 0) return fallback;
+
+  // Whichever value covers the most ids costs nothing as the fallback.
+  let commonest = fallback;
+  let best = -1;
+  for (const [value, ids] of byValue) {
+    if (ids.length > best) {
+      best = ids.length;
+      commonest = value;
+    }
+  }
 
   const branches: unknown[] = [];
-  for (const [id, status] of statuses) {
-    branches.push(id, STATUS_COLOR[status as keyof typeof STATUS_COLOR] ?? FALLBACK_COLOR);
+  for (const [value, ids] of byValue) {
+    if (value === commonest) continue;
+    branches.push(ids, value);
   }
-  return ['match', ['get', key], ...branches, FALLBACK_COLOR] as unknown as
-    DataDrivenPropertyValueSpecification<string>;
+  if (branches.length === 0) return commonest;
+
+  return ['match', ['get', key], ...branches, commonest];
+}
+
+/**
+ * Zoom-dependent size, scaled per feature by its emphasis tier.
+ *
+ * `["zoom"]` is only legal as the input to a *top-level* `interpolate`, so the
+ * tier multiplication cannot wrap it — the interpolation goes outside and each
+ * stop carries its own per-feature match. That repeats the id groups once per
+ * stop, which is the price of a legal expression; the grouping in
+ * `matchByValue` is what keeps it affordable.
+ */
+function zoomStops(
+  stops: Array<[zoom: number, size: number]>,
+  outputAt: (size: number) => unknown,
+) {
+  const expression: unknown[] = ['interpolate', ['linear'], ['zoom']];
+  for (const [zoom, size] of stops) expression.push(zoom, outputAt(size));
+  return expression;
+}
+
+/** Per-feature sizes for one zoom stop, scaled by each feature's tier. */
+function sizedBy(key: string, scales: Map<number, number>, size: number) {
+  const scaled = new Map<number, number>();
+  for (const [id, scale] of scales) scaled.set(id, +(size * scale).toFixed(2));
+  return matchByValue(key, scaled, size);
+}
+
+function scaledByZoom(
+  key: string,
+  scales: Map<number, number>,
+  stops: Array<[zoom: number, size: number]>,
+) {
+  return zoomStops(stops, (size) => sizedBy(key, scales, size));
 }
 
 export interface StyleInput {
@@ -123,19 +187,55 @@ export function buildDataPaint(
   dark: boolean,
 ): DataPaint {
   const byRule = statusByRuleId(rules, at, TIME_ZONE);
+
   const byCombo = statusByComboId(byRule, combos);
+
+  const halo = surface(dark).halo;
+
+  /**
+   * Availability is drawn twice: once in hue, once in weight. Parking you can
+   * use is full size, opaque and haloed; a prohibition is small and dim. That
+   * reads as figure against ground before colour is processed, which is what
+   * makes the map usable at a glance and legible to a colour-blind driver.
+   */
+  const tiers = (statuses: Map<number, Status>) => {
+    const scale = new Map<number, number>();
+    const opacity = new Map<number, number>();
+    const stroke = new Map<number, number>();
+    for (const [id, status] of statuses) {
+      const e = emphasisFor(status);
+      scale.set(id, e.scale);
+      opacity.set(id, e.opacity);
+      stroke.set(id, e.stroke);
+    }
+    return { scale, opacity, stroke };
+  };
+
+  const poleTiers = tiers(byRule);
+  const bayTiers = tiers(byCombo);
 
   return {
     poles: {
-      'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2.5, 16, 6, 18, 9],
-      'circle-color': colorExpression('ruleId', byRule as Map<number, string>),
-      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 13, 0, 16, 1],
-      'circle-stroke-color': dark ? '#11151c' : '#ffffff',
+      'circle-radius': scaledByZoom('ruleId', poleTiers.scale, [[13, 3], [16, 7], [18, 10]]),
+      'circle-color': matchByValue(
+        'ruleId',
+        [...byRule].map(([id, s]) => [id, STATUS_COLOR[s] ?? FALLBACK_COLOR] as [number, string]),
+        FALLBACK_COLOR,
+      ),
+      'circle-opacity': matchByValue('ruleId', poleTiers.opacity, 1),
+      'circle-stroke-width': scaledByZoom('ruleId', poleTiers.stroke, [[13, 0], [16, 1.4], [18, 2]]),
+      'circle-stroke-color': halo,
     },
     bays: {
-      'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2, 16, 5, 18, 7],
-      'circle-color': colorExpression('comboId', byCombo as Map<number, string>),
-      'circle-opacity': 0.85,
+      'circle-radius': scaledByZoom('comboId', bayTiers.scale, [[13, 2.5], [16, 5.5], [18, 8]]),
+      'circle-color': matchByValue(
+        'comboId',
+        [...byCombo].map(([id, v]) => [id, STATUS_COLOR[v] ?? FALLBACK_COLOR] as [number, string]),
+        FALLBACK_COLOR,
+      ),
+      'circle-opacity': matchByValue('comboId', bayTiers.opacity, 1),
+      'circle-stroke-width': scaledByZoom('comboId', bayTiers.stroke, [[13, 0], [16, 1], [18, 1.5]]),
+      'circle-stroke-color': halo,
     },
   };
 }

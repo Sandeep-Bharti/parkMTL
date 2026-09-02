@@ -301,3 +301,19 @@ export function statusByComboId(
   }
   return out;
 }
+
+/**
+ * Deliberately no `paid` seed here, unlike `assess`.
+ *
+ * It is tempting to mark every metered bay `paid`, but a meter is not always
+ * running: Montreal's tariff periods are themselves regulations with schedules,
+ * and outside them the space really is free. Measured over the paid feed,
+ * seeding `paid` unconditionally would mislabel 91% of bays at 03:00 and 68% at
+ * 22:00 — telling drivers to pay when they need not.
+ *
+ * `assess` takes `paid` as an input for exactly this reason: its contract is
+ * "a paid space *and currently within a tariff period*", which is a judgement
+ * the caller has to make. Until the tariff rule is identifiable as such in the
+ * model, the honest reading is what the regulations themselves say, with the
+ * tariff shown alongside it as a fact rather than folded into the verdict.
+ */

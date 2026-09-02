@@ -50,6 +50,28 @@ const STRINGS = {
     'sheet.maxDuration': 'max {duration}',
 
     'scrubber.now': 'Now',
+    'answer.none': 'No parking data here',
+    'answer.noneHint': 'Move the map over a street with signs',
+    'scrubber.at': 'At {time}',
+
+    'onboard.colours.title': 'What the colours mean',
+    'onboard.colours.body':
+      'Bright, larger dots are parking you can use right now. They are drawn to stand out so you can find them at a glance.',
+    'onboard.colours.restricted': 'Dimmer and smaller — you cannot park',
+    'onboard.trust.title': 'The sign always wins',
+    'onboard.trust.body':
+      'This app reads the city\u2019s own signage data, but that data can differ from what is actually on the street. Check the sign before you leave your car.',
+    'onboard.trust.sources':
+      'Données : Agence de mobilité durable de Montréal; Ville de Montréal (CC BY 4.0)',
+    'onboard.location.title': 'Find parking near you',
+    'onboard.location.body':
+      'Your location is used on the device to centre the map. It is never stored and never leaves your phone.',
+    'onboard.next': 'Next',
+    'onboard.allow': 'Use my location',
+    'onboard.notNow': 'Not now',
+
+    'legend.available': 'You can park',
+    'legend.restricted': 'You cannot',
     'search.placeholder': 'Street or borough',
     'search.noResults': 'No match',
     'search.streets': 'Streets with paid parking',
@@ -115,6 +137,28 @@ const STRINGS = {
     'sheet.maxDuration': 'max {duration}',
 
     'scrubber.now': 'Maintenant',
+    'answer.none': 'Aucune donnée ici',
+    'answer.noneHint': 'Déplacez la carte sur une rue avec des panneaux',
+    'scrubber.at': 'À {time}',
+
+    'onboard.colours.title': 'Ce que les couleurs signifient',
+    'onboard.colours.body':
+      'Les points vifs et plus gros indiquent un stationnement utilisable maintenant. Ils ressortent pour être repérés d\u2019un coup d\u2019œil.',
+    'onboard.colours.restricted': 'Plus pâles et plus petits — stationnement interdit',
+    'onboard.trust.title': 'Le panneau fait foi',
+    'onboard.trust.body':
+      'Cette application lit les données de signalisation de la Ville, mais elles peuvent différer de la réalité sur la rue. Vérifiez le panneau avant de quitter votre véhicule.',
+    'onboard.trust.sources':
+      'Données : Agence de mobilité durable de Montréal; Ville de Montréal (CC BY 4.0)',
+    'onboard.location.title': 'Trouver du stationnement près de vous',
+    'onboard.location.body':
+      'Votre position sert uniquement à centrer la carte, sur l\u2019appareil. Elle n\u2019est jamais enregistrée ni transmise.',
+    'onboard.next': 'Suivant',
+    'onboard.allow': 'Utiliser ma position',
+    'onboard.notNow': 'Plus tard',
+
+    'legend.available': 'Vous pouvez stationner',
+    'legend.restricted': 'Interdit',
     'search.placeholder': 'Rue ou arrondissement',
     'search.noResults': 'Aucun résultat',
     'search.streets': 'Rues avec stationnement payant',

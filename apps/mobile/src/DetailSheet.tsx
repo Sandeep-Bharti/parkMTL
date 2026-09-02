@@ -43,8 +43,10 @@ function arrowLabel(arrow: number): string | null {
 }
 
 export function DetailSheet({ selection, at, dark, t, lang, onClose }: Props) {
-  const paid = selection.kind === 'bay';
-  const result = assess(selection.rules, at, { timeZone: TIME_ZONE, paid });
+  // `paid` is deliberately not set from `kind === 'bay'`: assess's contract is
+  // "a paid space *and* within a tariff period", and the tariff period is
+  // itself a scheduled regulation. The rate is shown below as its own fact.
+  const result = assess(selection.rules, at, { timeZone: TIME_ZONE });
 
   const status: Status = result.status;
   const accent = STATUS_COLOR[status];

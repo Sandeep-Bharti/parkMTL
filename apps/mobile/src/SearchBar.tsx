@@ -12,16 +12,20 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { Translator } from './i18n.ts';
 import { searchPlaces, type Place } from './search.ts';
+import { elevation, radius, space, surface, type } from './theme.ts';
 
 interface Props {
   places: Place[];
   t: Translator;
   dark: boolean;
+  /** Distance from the top of the screen, past the safe-area inset. */
+  top: number;
   onSelect: (place: Place) => void;
   onOpenSettings: () => void;
 }
 
-export function SearchBar({ places, t, dark, onSelect, onOpenSettings }: Props) {
+export function SearchBar({ places, t, dark, top, onSelect, onOpenSettings }: Props) {
+  const s = surface(dark);
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
 
@@ -29,8 +33,8 @@ export function SearchBar({ places, t, dark, onSelect, onOpenSettings }: Props) 
   const showResults = focused && query.trim().length >= 2;
 
   return (
-    <View style={styles.wrap}>
-      <View style={[styles.bar, dark && styles.barDark]}>
+    <View style={[styles.wrap, { top }]}>
+      <View style={[styles.bar, { backgroundColor: s.card }, elevation.low]}>
         <Text style={styles.icon}>⌕</Text>
         <TextInput
           style={[styles.input, dark && styles.textDark]}
@@ -83,7 +87,7 @@ export function SearchBar({ places, t, dark, onSelect, onOpenSettings }: Props) 
 }
 
 const styles = StyleSheet.create({
-  wrap: { position: 'absolute', top: 58, left: 12, right: 66 },
+  wrap: { position: 'absolute', left: space.md, right: 68 },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',

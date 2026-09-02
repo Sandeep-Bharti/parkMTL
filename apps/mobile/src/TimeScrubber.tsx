@@ -80,17 +80,6 @@ export function TimeScrubber({ offsetHours, onChange, now, t, lang, dark }: Prop
 
   return (
     <View style={[styles.wrap, dark && styles.wrapDark]}>
-      <View style={styles.labelRow}>
-        <Text style={[styles.label, dark && styles.textDark]}>
-          {isNow ? t('scrubber.now') : formatWhen(at, now, t, lang)}
-        </Text>
-        {!isNow && (
-          <Pressable onPress={() => onChange(0)} hitSlop={10}>
-            <Text style={styles.reset}>{t('scrubber.now')}</Text>
-          </Pressable>
-        )}
-      </View>
-
       <View style={styles.track} onLayout={onLayout} {...responder.panHandlers}>
         <View style={[styles.trackLine, dark && styles.trackLineDark]} />
         {/* The midpoint tick marks the present, so "how far from now" stays
@@ -101,6 +90,11 @@ export function TimeScrubber({ offsetHours, onChange, now, t, lang, dark }: Prop
 
       <View style={styles.scaleRow}>
         <Text style={styles.scale}>−24h</Text>
+        {!isNow && (
+          <Pressable onPress={() => onChange(0)} hitSlop={12}>
+            <Text style={styles.reset}>{t('scrubber.now')}</Text>
+          </Pressable>
+        )}
         <Text style={styles.scale}>+24h</Text>
       </View>
     </View>
@@ -108,23 +102,9 @@ export function TimeScrubber({ offsetHours, onChange, now, t, lang, dark }: Prop
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 26,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 8,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 6,
-  },
-  wrapDark: { backgroundColor: 'rgba(22,26,33,0.95)' },
+  // Lives inside AnswerCard now, so it lays out in flow rather than floating.
+  wrap: { paddingTop: 2 },
+  wrapDark: {},
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   label: { fontSize: 15, fontWeight: '600' },
   textDark: { color: '#e8eaed' },
