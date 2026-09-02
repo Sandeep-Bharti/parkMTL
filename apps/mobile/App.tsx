@@ -116,15 +116,17 @@ export default function App() {
     [now, offsetHours],
   );
 
-  // Constant: rebuilding this would tear down every source and reload the map.
+  // Rebuilt only when the theme or language changes — each rebuild costs a
+  // native style reload, which is fine for a setting and not for the scrubber.
   const style = useMemo(() => {
     if (!artifacts) return null;
     return buildStyle({
       baseTilesUrl: artifacts.baseTilesUrl,
       dataTilesUrl: artifacts.dataTilesUrl,
       dark,
+      lang,
     });
-  }, [artifacts, dark]);
+  }, [artifacts, dark, lang]);
 
   // Changes on every scrubber tick; only the layers' paint props are updated.
   const paint = useMemo(() => {

@@ -45,11 +45,12 @@ function load(): { rules: Rule[]; combos: RuleCombo[] } {
   return { rules, combos: [...byCombo].map(([id, ruleIds]) => ({ id, ruleIds })) };
 }
 
-const style = (dark = false) =>
+const style = (dark = false, lang = 'en') =>
   buildStyle({
     baseTilesUrl: 'pmtiles://file:///tmp/base.pmtiles',
     dataTilesUrl: 'pmtiles://file:///tmp/data.pmtiles',
     dark,
+    lang,
   });
 
 const AT = new Date('2026-09-07T15:00:00Z');
@@ -105,6 +106,18 @@ describe('buildStyle', () => {
     for (const source of Object.values(s.sources)) {
       assert.match(source.url, /^pmtiles:\/\/file:\/\/\//);
     }
+  });
+
+  it('labels the basemap in the app language', () => {
+    // This was hard-coded to French, so an English interface sat on a French
+    // map — which reads as a half-finished translation rather than a choice.
+    const en = JSON.stringify(style(false, 'en'));
+    const fr = JSON.stringify(style(false, 'fr'));
+
+    assert.notEqual(en, fr, 'language should change the style');
+    assert.ok(en.includes('name:en'), 'English style should ask for English names');
+    assert.ok(fr.includes('name:fr'), 'French style should ask for French names');
+    assert.ok(!en.includes('name:fr'), 'English style should not ask for French names');
   });
 });
 

@@ -60,13 +60,31 @@ export interface StyleInput {
   baseTilesUrl: string;
   dataTilesUrl: string;
   dark: boolean;
+  /**
+   * Language for the basemap's own labels. Follows the app language: an English
+   * interface over a French map reads as a half-finished translation.
+   *
+   * Street names stay as they are — "Avenue Van Horne" is the street's name,
+   * not a French rendering of it — but everything the basemap does localise
+   * (place names with a `name:en`, POI categories) follows this.
+   */
+  lang: string;
 }
 
 /**
- * The basemap and the two vector sources. Deliberately free of anything that
- * changes with time, so this object can be built once and never replaced.
+ * The basemap and the two vector sources. Free of anything that changes with
+ * *time*, so the scrubber never replaces it.
+ *
+ * Language and theme do change it, and each change costs a native style reload.
+ * That is acceptable for settings someone toggles occasionally; it would not be
+ * for something dragged.
  */
-export function buildStyle({ baseTilesUrl, dataTilesUrl, dark }: StyleInput): StyleSpecification {
+export function buildStyle({
+  baseTilesUrl,
+  dataTilesUrl,
+  dark,
+  lang,
+}: StyleInput): StyleSpecification {
   return {
     version: 8,
     // NOT yet offline: the tiles are local but label glyphs and sprites are
@@ -83,7 +101,7 @@ export function buildStyle({ baseTilesUrl, dataTilesUrl, dark }: StyleInput): St
         attribution: 'Ville de Montréal; Agence de mobilité durable (CC BY 4.0)',
       },
     },
-    layers: [...layers(BASE_SOURCE, namedFlavor(dark ? 'dark' : 'light'), { lang: 'fr' })],
+    layers: [...layers(BASE_SOURCE, namedFlavor(dark ? 'dark' : 'light'), { lang })],
   };
 }
 
