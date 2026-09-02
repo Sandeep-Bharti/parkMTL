@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 
 import { formatWhen } from './format.ts';
+import type { Language, Translator } from './i18n.ts';
 
 /** How far either side of now the scrubber reaches. */
 export const RANGE_HOURS = 24;
@@ -30,10 +31,12 @@ interface Props {
   offsetHours: number;
   onChange: (offsetHours: number) => void;
   now: Date;
+  t: Translator;
+  lang: Language;
   dark: boolean;
 }
 
-export function TimeScrubber({ offsetHours, onChange, now, dark }: Props) {
+export function TimeScrubber({ offsetHours, onChange, now, t, lang, dark }: Props) {
   const [width, setWidth] = useState(0);
   const widthRef = useRef(0);
 
@@ -79,11 +82,11 @@ export function TimeScrubber({ offsetHours, onChange, now, dark }: Props) {
     <View style={[styles.wrap, dark && styles.wrapDark]}>
       <View style={styles.labelRow}>
         <Text style={[styles.label, dark && styles.textDark]}>
-          {isNow ? 'Now' : formatWhen(at, now)}
+          {isNow ? t('scrubber.now') : formatWhen(at, now, t, lang)}
         </Text>
         {!isNow && (
           <Pressable onPress={() => onChange(0)} hitSlop={10}>
-            <Text style={styles.reset}>Now</Text>
+            <Text style={styles.reset}>{t('scrubber.now')}</Text>
           </Pressable>
         )}
       </View>

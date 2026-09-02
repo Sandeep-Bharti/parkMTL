@@ -17,7 +17,7 @@ import type { Rule } from '@parkmtl/rules-core';
 import type { RuleCombo } from '@parkmtl/rules-core';
 
 /** `file://…` form, which is what expo-file-system works in. */
-const DATA_DIR = `${FileSystem.documentDirectory}parkmtl`;
+export const DATA_DIR = `${FileSystem.documentDirectory}parkmtl`;
 
 /**
  * Plain filesystem path form. expo-sqlite and MapLibre both want a real path,

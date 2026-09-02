@@ -21,7 +21,10 @@
     "expo-sqlite": "~57.0.2",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
-    "react-native": "0.86.3"
+    "react-native": "0.86.3",
+    "expo-localization": "~57.0.1",
+    "expo-background-task": "~57.0.14",
+    "expo-task-manager": "~57.0.14"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

@@ -9,6 +9,7 @@ import {
   useColorScheme,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { getLocales } from 'expo-localization';
 import {
   Camera,
   Layer,
@@ -24,7 +25,13 @@ import {
 
 import type { Rule } from '@parkmtl/rules-core';
 
-import { loadArtifacts, poleDetail, spaceDetail, type Artifacts } from './src/data.ts';
+import {
+  DATA_DIR,
+  loadArtifacts,
+  poleDetail,
+  spaceDetail,
+  type Artifacts,
+} from './src/data.ts';
 import {
   BAY_LAYER,
   DATA_MIN_ZOOM,
@@ -33,9 +40,15 @@ import {
   buildDataPaint,
   buildStyle,
 } from './src/style.ts';
-import { STATUS_COLOR, STATUS_LABEL } from './src/status-colors.ts';
+import { STATUS_COLOR, statusLabel } from './src/status-colors.ts';
+import { pickLanguage, translatorFor, type Language } from './src/i18n.ts';
 import { DetailSheet, type Selection } from './src/DetailSheet.tsx';
 import { TimeScrubber } from './src/TimeScrubber.tsx';
+import { SearchBar } from './src/SearchBar.tsx';
+import { SettingsSheet, type UpdateState } from './src/SettingsSheet.tsx';
+import { loadPlaces, type Place } from './src/search.ts';
+import { DATA_BASE_URL, checkForUpdate } from './src/updates.ts';
+import { registerRefresh } from './src/background.ts';
 
 /** Downtown Montreal, where the signage is densest. */
 const START = { center: [-73.5673, 45.5019] as [number, number], zoom: 15 };
@@ -61,26 +74,41 @@ const TAP_SLOP = 22;
 export default function App() {
   const dark = useColorScheme() === 'dark';
   const [artifacts, setArtifacts] = useState<Artifacts | null>(null);
+  const [places, setPlaces] = useState<Place[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [offsetHours, setOffsetHours] = useState(0);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [legendOpen, setLegendOpen] = useState(false);
   const [tracking, setTracking] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [languageOverride, setLanguageOverride] = useState<Language | null>(null);
+  const [updateState, setUpdateState] = useState<UpdateState>('idle');
 
   const mapRef = useRef<MapRef>(null);
   const cameraRef = useRef<CameraRef>(null);
 
+  const lang = useMemo(
+    () => languageOverride ?? pickLanguage(getLocales().map((l) => l.languageCode)),
+    [languageOverride],
+  );
+  const t = useMemo(() => translatorFor(lang), [lang]);
+
   useEffect(() => {
     let cancelled = false;
     loadArtifacts()
-      .then((a) => !cancelled && setArtifacts(a))
+      .then(async (a) => {
+        if (cancelled) return;
+        setArtifacts(a);
+        setPlaces(await loadPlaces(a.db));
+      })
       .catch((e) => !cancelled && setError(String(e?.message ?? e)));
+    void registerRefresh();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // The instant the map is painted for. `now` is fixed at mount so dragging the
+  // The instant the map is painted for. `now` is fixed at load so dragging the
   // scrubber is reproducible; the offset moves relative to it.
   const now = useMemo(() => new Date(), [artifacts]);
   const at = useMemo(
@@ -113,6 +141,7 @@ export default function App() {
   const onPress = useCallback(
     async (event: NativeSyntheticEvent<PressEvent>) => {
       if (!artifacts || !mapRef.current) return;
+      setSettingsOpen(false);
 
       const [x, y] = event.nativeEvent.point;
       const rect: [[number, number], [number, number]] = [
@@ -179,6 +208,27 @@ export default function App() {
     }
   }, []);
 
+  const goTo = useCallback((place: Place) => {
+    cameraRef.current?.flyTo({
+      center: [place.lon, place.lat],
+      zoom: place.zoom,
+      duration: 800,
+    });
+  }, []);
+
+  const onCheckUpdates = useCallback(async () => {
+    setUpdateState('checking');
+    const current = artifacts?.meta.ruleDictVersion ?? null;
+    const outcome = await checkForUpdate(DATA_BASE_URL, DATA_DIR, current);
+    setUpdateState(
+      outcome.status === 'updated'
+        ? 'updated'
+        : outcome.status === 'up-to-date'
+          ? 'up-to-date'
+          : 'failed',
+    );
+  }, [artifacts]);
+
   if (error) {
     return (
       <View style={[styles.centre, dark && styles.centreDark]}>
@@ -192,10 +242,12 @@ export default function App() {
     return (
       <View style={[styles.centre, dark && styles.centreDark]}>
         <ActivityIndicator />
-        <Text style={[styles.detail, dark && styles.textDark]}>Preparing map data…</Text>
+        <Text style={[styles.detail, dark && styles.textDark]}>…</Text>
       </View>
     );
   }
+
+  const sheetOpen = selection !== null || settingsOpen;
 
   return (
     <View style={styles.root}>
@@ -234,6 +286,25 @@ export default function App() {
         {tracking && <UserLocation />}
       </MapView>
 
+      <SearchBar
+        places={places}
+        t={t}
+        dark={dark}
+        onSelect={goTo}
+        onOpenSettings={() => {
+          setSelection(null);
+          setSettingsOpen(true);
+        }}
+      />
+
+      <Pressable
+        style={[styles.locate, dark && styles.locateDark]}
+        onPress={locate}
+        accessibilityLabel="Show my location"
+      >
+        <Text style={styles.locateIcon}>◎</Text>
+      </Pressable>
+
       <Pressable
         style={[styles.legend, dark && styles.legendDark]}
         onPress={() => setLegendOpen((v) => !v)}
@@ -244,13 +315,10 @@ export default function App() {
               <View key={status} style={styles.legendRow}>
                 <View style={[styles.swatch, { backgroundColor: STATUS_COLOR[status] }]} />
                 <Text style={[styles.legendText, dark && styles.textDark]}>
-                  {STATUS_LABEL[status]}
+                  {statusLabel(status, t)}
                 </Text>
               </View>
             ))}
-            <Text style={[styles.stamp, dark && styles.textDark]}>
-              {artifacts.rules.length} rules · data {artifacts.meta.exportDate}
-            </Text>
           </>
         ) : (
           <View style={styles.legendRow}>
@@ -260,33 +328,52 @@ export default function App() {
                 style={[styles.swatchSmall, { backgroundColor: STATUS_COLOR[status] }]}
               />
             ))}
-            <Text style={[styles.legendText, dark && styles.textDark]}>Legend</Text>
+            <Text style={[styles.legendText, dark && styles.textDark]}>{t('legend.title')}</Text>
           </View>
         )}
       </Pressable>
 
-      <Pressable
-        style={[styles.locate, dark && styles.locateDark]}
-        onPress={locate}
-        accessibilityLabel="Show my location"
-      >
-        <Text style={styles.locateIcon}>◎</Text>
-      </Pressable>
-
-      {selection ? (
-        <DetailSheet
-          selection={selection}
-          at={at}
-          dark={dark}
-          onClose={() => setSelection(null)}
-        />
-      ) : (
+      {!sheetOpen && (
         <TimeScrubber
           offsetHours={offsetHours}
           onChange={setOffsetHours}
           now={now}
+          t={t}
+          lang={lang}
           dark={dark}
         />
+      )}
+
+      {selection && (
+        <DetailSheet
+          selection={selection}
+          at={at}
+          dark={dark}
+          t={t}
+          lang={lang}
+          onClose={() => setSelection(null)}
+        />
+      )}
+
+      {settingsOpen && (
+        <SettingsSheet
+          t={t}
+          lang={lang}
+          languageOverride={languageOverride}
+          onLanguage={setLanguageOverride}
+          exportDate={artifacts.meta.exportDate ?? '—'}
+          ruleCount={artifacts.rules.length}
+          updateState={updateState}
+          onCheckUpdates={onCheckUpdates}
+          dark={dark}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {!sheetOpen && (
+        <View style={styles.disclaimer} pointerEvents="none">
+          <Text style={styles.disclaimerText}>{t('disclaimer.short')}</Text>
+        </View>
       )}
 
       <StatusBar style={dark ? 'light' : 'dark'} />
@@ -310,9 +397,9 @@ const styles = StyleSheet.create({
   textDark: { color: '#e8eaed' },
   legend: {
     position: 'absolute',
-    top: 60,
+    top: 112,
     left: 12,
-    padding: 10,
+    padding: 9,
     borderRadius: 10,
     gap: 5,
     backgroundColor: 'rgba(255,255,255,0.92)',
@@ -322,23 +409,33 @@ const styles = StyleSheet.create({
   swatch: { width: 11, height: 11, borderRadius: 6 },
   swatchSmall: { width: 9, height: 9, borderRadius: 5 },
   legendText: { fontSize: 12 },
-  stamp: { fontSize: 10, opacity: 0.6, marginTop: 3 },
   locate: {
     position: 'absolute',
     right: 12,
-    top: 60,
+    top: 58,
     width: 42,
     height: 42,
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: 'rgba(255,255,255,0.96)',
     shadowColor: '#000',
     shadowOpacity: 0.12,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   },
-  locateDark: { backgroundColor: 'rgba(17,21,28,0.92)' },
+  locateDark: { backgroundColor: 'rgba(22,26,33,0.96)' },
   locateIcon: { fontSize: 20, color: '#2f6fd0' },
+  disclaimer: {
+    position: 'absolute',
+    bottom: 118,
+    left: 12,
+    right: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 11,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  disclaimerText: { color: '#ffffff', fontSize: 10, textAlign: 'center' },
 });

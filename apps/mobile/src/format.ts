@@ -11,28 +11,34 @@
 import type { Assessment, Status } from '@parkmtl/rules-core';
 import { TIME_ZONE } from '@parkmtl/city-montreal';
 
-const timeFormat = new Intl.DateTimeFormat('en-CA', {
-  timeZone: TIME_ZONE,
-  hour: 'numeric',
-  minute: '2-digit',
-  hour12: true,
-});
+import type { Language, Translator } from './i18n.ts';
 
-const dayFormat = new Intl.DateTimeFormat('en-CA', {
-  timeZone: TIME_ZONE,
-  weekday: 'long',
-});
+const LOCALE: Record<Language, string> = { en: 'en-CA', fr: 'fr-CA' };
 
-const dateKeyFormat = new Intl.DateTimeFormat('en-CA', {
-  timeZone: TIME_ZONE,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
+/** Intl formatters are expensive to build, so each variant is made once. */
+const cache = new Map<string, Intl.DateTimeFormat>();
 
-/** "6:00 p.m." */
-export function formatTime(date: Date): string {
-  return timeFormat.format(date).replace(/\s+/g, ' ');
+function formatter(lang: Language, kind: 'time' | 'day' | 'key'): Intl.DateTimeFormat {
+  const cacheKey = `${lang}:${kind}`;
+  let found = cache.get(cacheKey);
+  if (!found) {
+    const base = { timeZone: TIME_ZONE } as const;
+    found = new Intl.DateTimeFormat(
+      LOCALE[lang],
+      kind === 'time'
+        ? { ...base, hour: 'numeric', minute: '2-digit', hour12: lang === 'en' }
+        : kind === 'day'
+          ? { ...base, weekday: 'long' }
+          : { ...base, year: 'numeric', month: '2-digit', day: '2-digit' },
+    );
+    cache.set(cacheKey, found);
+  }
+  return found;
+}
+
+/** "6:00 p.m." in English, "18 h 00" in French. */
+export function formatTime(date: Date, lang: Language = 'en'): string {
+  return formatter(lang, 'time').format(date).replace(/\s+/g, ' ');
 }
 
 /**
@@ -41,23 +47,23 @@ export function formatTime(date: Date): string {
  * Counts real days rather than subtracting YYYYMMDD integers, which would make
  * the last day of a month look 70 days from the first of the next.
  */
-function dayIndex(date: Date): number {
-  // en-CA formats as YYYY-MM-DD, so the parts are already in order.
-  const [year, month, day] = dateKeyFormat.format(date).split('-').map(Number);
-  return Math.round(Date.UTC(year, month - 1, day) / 86_400_000);
+function dayIndex(date: Date, lang: Language): number {
+  const parts = formatter(lang, 'key').formatToParts(date);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return Math.round(Date.UTC(get('year'), get('month') - 1, get('day')) / 86_400_000);
 }
 
 /**
  * "6:00 p.m.", "9:30 a.m. tomorrow", or the weekday for anything further out.
  * A bare clock time two days away would be read as today.
  */
-export function formatWhen(target: Date, now: Date): string {
-  const time = formatTime(target);
-  const days = dayIndex(target) - dayIndex(now);
+export function formatWhen(target: Date, now: Date, t: Translator, lang: Language = 'en'): string {
+  const time = formatTime(target, lang);
+  const days = dayIndex(target, lang) - dayIndex(now, lang);
 
   if (days === 0) return time;
-  if (days === 1) return `${time} tomorrow`;
-  return `${time} ${dayFormat.format(target)}`;
+  if (days === 1) return t('sub.tomorrow', { time });
+  return `${time} ${formatter(lang, 'day').format(target)}`;
 }
 
 /** "2 h", "45 min", "1 h 30" — how long a maxDuration allows. */
@@ -68,18 +74,8 @@ export function formatDuration(minutes: number): string {
   return rest === 0 ? `${hours} h` : `${hours} h ${rest}`;
 }
 
-const HEADLINE: Record<Status, string> = {
-  free: 'You can park here',
-  paid: 'Paid parking',
-  limited: 'Limited parking',
-  permit_only: 'Permit holders only',
-  no_parking: 'No parking',
-  no_standing: 'No stopping',
-  unknown: 'Check the sign',
-};
-
-export function headline(status: Status): string {
-  return HEADLINE[status];
+export function headline(status: Status, t: Translator): string {
+  return t(`verdict.${status}` as const);
 }
 
 /**
@@ -89,26 +85,34 @@ export function headline(status: Status): string {
  * permanent restriction is the truth and should be said plainly rather than
  * left blank.
  */
-export function subline(assessment: Assessment, now: Date): string {
+export function subline(
+  assessment: Assessment,
+  now: Date,
+  t: Translator,
+  lang: Language = 'en',
+): string {
   const { status, until, next } = assessment;
 
   if (until === null) {
-    return status === 'free' ? 'No restrictions posted' : 'At all times';
+    return status === 'free' ? t('sub.none') : t('sub.always');
   }
 
-  const when = formatWhen(until, now);
+  const when = formatWhen(until, now, t, lang);
 
   // Naming the consequence is the useful half: "until 6 PM" leaves the driver
   // to guess whether 6 PM is when they get towed or when it gets better.
   switch (next) {
     case 'no_parking':
     case 'no_standing':
-      return `Until ${when}, then you must move`;
+      return t('sub.untilMove', { when });
     case 'free':
-      return `Until ${when} — free after that`;
+      return t('sub.untilFree', { when });
     case null:
-      return `Until ${when}`;
+      return t('sub.until', { when });
     default:
-      return `Until ${when}, then ${HEADLINE[next].toLowerCase()}`;
+      return t('sub.untilThen', {
+        when,
+        status: t(`verdict.${next}` as const).toLowerCase(),
+      });
   }
 }

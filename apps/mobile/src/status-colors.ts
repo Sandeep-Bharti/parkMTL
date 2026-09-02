@@ -1,12 +1,15 @@
 import type { Status } from '@parkmtl/rules-core';
 
+import type { Translator } from './i18n.ts';
+
 /**
  * One colour per status, and the whole visual language of the app.
  *
  * Green means park here. Amber means you may park but something is limited —
- * a time cap, a permit, a meter. Red means do not. Grey means we could not read
- * the sign, and grey must never be mistaken for green: an unknown curb is one
- * the driver has to check themselves.
+ * a time cap, a meter. Purple means the space is reserved for someone holding a
+ * permit. Red means do not. Grey means we could not read the sign, and grey must
+ * never be mistaken for green: an unknown curb is one the driver has to check
+ * themselves.
  *
  * Chosen to stay distinguishable with deuteranopia, where the green/red pair is
  * carried by lightness as much as hue.
@@ -24,12 +27,6 @@ export const STATUS_COLOR: Record<Status, string> = {
 /** Painted where a feature's rule is missing from the dictionary entirely. */
 export const FALLBACK_COLOR = STATUS_COLOR.unknown;
 
-export const STATUS_LABEL: Record<Status, string> = {
-  free: 'Free',
-  paid: 'Paid',
-  limited: 'Time limited',
-  permit_only: 'Permit only',
-  no_parking: 'No parking',
-  no_standing: 'No standing',
-  unknown: 'Check the sign',
-};
+export function statusLabel(status: Status, t: Translator): string {
+  return t(`status.${status}` as const);
+}

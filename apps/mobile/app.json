@@ -12,7 +12,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "ca.parkmtl.app",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Shows which parking near you is free right now."
+        "NSLocationWhenInUseUsageDescription": "Shows which parking near you is free right now.",
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "com.expo.modules.backgroundtask.processing"
+        ]
       }
     },
     "android": {
@@ -28,17 +31,27 @@
     "plugins": [
       "expo-dev-client",
       "expo-sqlite",
+      "expo-background-task",
       [
         "@maplibre/maplibre-react-native",
         {
-          "android": { "nativeVersion": "13.2.0" },
-          "ios": { "nativeVersion": "6.26.0" }
+          "android": {
+            "nativeVersion": "13.2.0"
+          },
+          "ios": {
+            "nativeVersion": "6.26.0"
+          }
         }
       ]
     ],
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "packagerOpts": {
-      "assetExts": ["pmtiles", "sqlite"]
+      "assetExts": [
+        "pmtiles",
+        "sqlite"
+      ]
     }
   }
 }

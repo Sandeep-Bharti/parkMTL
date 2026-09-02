@@ -14,6 +14,7 @@ import { TIME_ZONE, formatTariff } from '@parkmtl/city-montreal';
 
 import { STATUS_COLOR } from './status-colors.ts';
 import { formatDuration, headline, subline } from './format.ts';
+import type { Language, Translator } from './i18n.ts';
 import type { PoleDetail, SpaceDetail } from './data.ts';
 
 export interface Selection {
@@ -28,6 +29,8 @@ interface Props {
   selection: Selection;
   at: Date;
   dark: boolean;
+  t: Translator;
+  lang: Language;
   onClose: () => void;
 }
 
@@ -39,7 +42,7 @@ function arrowLabel(arrow: number): string | null {
   return '↕';
 }
 
-export function DetailSheet({ selection, at, dark, onClose }: Props) {
+export function DetailSheet({ selection, at, dark, t, lang, onClose }: Props) {
   const paid = selection.kind === 'bay';
   const result = assess(selection.rules, at, { timeZone: TIME_ZONE, paid });
 
@@ -54,9 +57,9 @@ export function DetailSheet({ selection, at, dark, onClose }: Props) {
       <View style={styles.headerRow}>
         <View style={[styles.dot, { backgroundColor: accent }]} />
         <View style={styles.headerText}>
-          <Text style={[styles.headline, dark && styles.textDark]}>{headline(status)}</Text>
+          <Text style={[styles.headline, dark && styles.textDark]}>{headline(status, t)}</Text>
           <Text style={[styles.subline, dark && styles.textDimDark]}>
-            {subline(result, at)}
+            {subline(result, at, t, lang)}
           </Text>
         </View>
         <Pressable onPress={onClose} hitSlop={12} accessibilityLabel="Close">
@@ -67,8 +70,7 @@ export function DetailSheet({ selection, at, dark, onClose }: Props) {
       {result.needsVerification && (
         <View style={styles.warning}>
           <Text style={styles.warningText}>
-            Part of this sign could not be read automatically. Check the sign itself before
-            you leave the car.
+{t('sheet.verify')}
           </Text>
         </View>
       )}
@@ -81,14 +83,16 @@ export function DetailSheet({ selection, at, dark, onClose }: Props) {
             )}
             <Text style={[styles.tariff, dark && styles.textDark]}>
               {space.hourlyRateCents
-                ? `${formatTariff(space.hourlyRateCents)} / hour`
-                : 'Tariff not listed'}
-              {space.maxTariffCents ? ` · max ${formatTariff(space.maxTariffCents)}` : ''}
+                ? t('sheet.perHour', { amount: formatTariff(space.hourlyRateCents) })
+                : t('sheet.noTariff')}
+              {space.maxTariffCents
+                ? ` · ${t('sheet.maxTariff', { amount: formatTariff(space.maxTariffCents) })}`
+                : ''}
             </Text>
             <Text style={[styles.meta, dark && styles.textDimDark]}>
               {[
-                space.accessible ? 'Accessible space' : null,
-                space.paired ? `Shares a meter with ${space.paired}` : null,
+                space.accessible ? t('sheet.accessible') : null,
+                space.paired ? t('sheet.shares', { id: space.paired }) : null,
                 space.exploitation,
               ]
                 .filter(Boolean)
@@ -101,8 +105,8 @@ export function DetailSheet({ selection, at, dark, onClose }: Props) {
           <>
             <Text style={[styles.sectionLabel, dark && styles.textDimDark]}>
               {selection.pole.signs.length === 1
-                ? 'The sign on this pole'
-                : `${selection.pole.signs.length} panels on this pole, top to bottom`}
+                ? t('sheet.onePanel')
+                : t('sheet.panels', { n: selection.pole.signs.length })}
             </Text>
 
             {selection.pole.signs.map((sign, i) => (
@@ -118,7 +122,7 @@ export function DetailSheet({ selection, at, dark, onClose }: Props) {
                   {arrowLabel(sign.arrow) ? ` ${arrowLabel(sign.arrow)}` : ''}
                 </Text>
                 {sign.confidence !== 'full' && (
-                  <Text style={styles.signFlag}>not fully understood</Text>
+                  <Text style={styles.signFlag}>{t('sheet.notUnderstood')}</Text>
                 )}
               </View>
             ))}
@@ -127,18 +131,20 @@ export function DetailSheet({ selection, at, dark, onClose }: Props) {
 
         {result.active.length > 0 && (
           <>
-            <Text style={[styles.sectionLabel, dark && styles.textDimDark]}>In force now</Text>
+            <Text style={[styles.sectionLabel, dark && styles.textDimDark]}>{t('sheet.inForce')}</Text>
             {result.active.map((rule) => (
               <Text key={rule.id} style={[styles.activeRule, dark && styles.textDimDark]}>
                 {rule.raw}
-                {rule.maxDurationMin ? ` — max ${formatDuration(rule.maxDurationMin)}` : ''}
+                {rule.maxDurationMin
+                  ? ` — ${t('sheet.maxDuration', { duration: formatDuration(rule.maxDurationMin) })}`
+                  : ''}
               </Text>
             ))}
           </>
         )}
 
         <Text style={styles.footnote}>
-          Guidance only. The signs on the street are authoritative.
+{t('disclaimer.short')}
         </Text>
       </ScrollView>
     </View>
