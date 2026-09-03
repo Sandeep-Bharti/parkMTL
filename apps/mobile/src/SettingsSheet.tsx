@@ -23,7 +23,13 @@ const SOURCES = [
   { label: 'OpenStreetMap (basemap)', url: 'https://www.openstreetmap.org/copyright' },
 ];
 
-export type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'updated' | 'failed';
+export type UpdateState =
+  | 'idle'
+  | 'checking'
+  | 'up-to-date'
+  | 'updated'
+  | 'not-configured'
+  | 'failed';
 
 interface Props {
   t: Translator;
@@ -57,9 +63,11 @@ export function SettingsSheet({
         ? t('settings.upToDate')
         : updateState === 'updated'
           ? t('settings.updated')
-          : updateState === 'failed'
-            ? t('settings.updateFailed')
-            : t('settings.checkUpdates');
+          : updateState === 'not-configured'
+            ? t('settings.noSource')
+            : updateState === 'failed'
+              ? t('settings.updateFailed')
+              : t('settings.checkUpdates');
 
   return (
     <View style={[styles.sheet, dark && styles.sheetDark]}>

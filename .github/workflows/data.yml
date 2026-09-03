@@ -67,11 +67,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="data-${{ steps.meta.outputs.date }}"
-          FILES="data/out/montreal.pmtiles data/out/montreal.sqlite data/out/manifest.json"
+          ARTIFACTS="data/out/montreal.pmtiles data/out/montreal.sqlite"
+
+          # The manifest goes last, on its own. A client that fetched a new
+          # manifest before its artifacts had landed would try to download files
+          # that are not there yet; uploading in this order makes that window
+          # impossible rather than merely survivable.
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" $FILES --clobber
+            gh release upload "$TAG" $ARTIFACTS --clobber
+            gh release upload "$TAG" data/out/manifest.json --clobber
           else
-            gh release create "$TAG" $FILES \
+            gh release create "$TAG" $ARTIFACTS \
               --title "Data $TAG" \
               --notes "Montreal parking data, export ${{ steps.meta.outputs.date }}."
+            gh release upload "$TAG" data/out/manifest.json
           fi

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   NativeSyntheticEvent,
   Pressable,
   StyleSheet,
@@ -33,8 +34,10 @@ import {
   loadArtifacts,
   poleDetail,
   spaceDetail,
+  writeRecord,
   type Artifacts,
 } from './src/data.ts';
+import { artifactNames, dueForCheck } from './src/installed.ts';
 import {
   BAY_LAYER,
   DATA_MIN_ZOOM,
@@ -51,7 +54,7 @@ import { SettingsSheet, type UpdateState } from './src/SettingsSheet.tsx';
 import { AnswerCard, type CentreAnswer } from './src/AnswerCard.tsx';
 import { Onboarding } from './src/Onboarding.tsx';
 import { loadPlaces, type Place } from './src/search.ts';
-import { DATA_BASE_URL, checkForUpdate } from './src/updates.ts';
+import { DATA_BASE_URL, checkForUpdate, describeOutcome } from './src/updates.ts';
 import { registerRefresh } from './src/background.ts';
 import { hasOnboarded, setOnboarded } from './src/prefs.ts';
 import { elevation, radius, space, surface, type } from './src/theme.ts';
@@ -268,21 +271,77 @@ function Parkmtl() {
     });
   }, []);
 
-  const onCheckUpdates = useCallback(async () => {
-    setUpdateState('checking');
-    const outcome = await checkForUpdate(
-      DATA_BASE_URL,
-      DATA_DIR,
-      artifacts?.meta.ruleDictVersion ?? null,
-    );
-    setUpdateState(
-      outcome.status === 'updated'
-        ? 'updated'
-        : outcome.status === 'up-to-date'
+  /**
+   * Check, install, and apply — without a restart.
+   *
+   * On success the artifacts are reloaded and swapped into state. Rules, combos
+   * and the tile URL all flow from that, so the map recolours and the style
+   * picks up the new (versioned) source URL on its own.
+   */
+  const runUpdate = useCallback(
+    async (manual: boolean) => {
+      if (!artifacts) return;
+      if (manual) setUpdateState('checking');
+
+      const current = artifacts.installed;
+      // Destination names come from the *incoming* build, so pass the factory
+      // rather than the current build's names.
+      const outcome = await checkForUpdate(
+        DATA_BASE_URL,
+        DATA_DIR,
+        current.ruleDictVersion,
+        artifactNames,
+      );
+
+      const checkedAt = new Date().toISOString();
+      const note = describeOutcome(outcome);
+
+      if (outcome.status === 'updated' && outcome.manifest) {
+        // Record the new build only after its files are in place, then reload.
+        await writeRecord({
+          ruleDictVersion: outcome.manifest.ruleDictVersion,
+          exportDate: outcome.manifest.exportDate,
+          builtAt: outcome.manifest.builtAt,
+          source: 'download',
+          lastCheckedAt: checkedAt,
+          lastOutcome: note,
+        });
+        const fresh = await loadArtifacts();
+        await artifacts.db.closeAsync().catch(() => {});
+        setArtifacts(fresh);
+        setPlaces(await loadPlaces(fresh.db));
+        setUpdateState('updated');
+        return;
+      }
+
+      await writeRecord({ ...current, lastCheckedAt: checkedAt, lastOutcome: note });
+      setUpdateState(
+        outcome.status === 'up-to-date'
           ? 'up-to-date'
-          : 'failed',
-    );
-  }, [artifacts]);
+          : outcome.status === 'not-configured'
+            ? 'not-configured'
+            : 'failed',
+      );
+    },
+    [artifacts],
+  );
+
+  const onCheckUpdates = useCallback(() => void runUpdate(true), [runUpdate]);
+
+  // Check when the app opens and when it comes back to the foreground, rate
+  // limited. The background task is a top-up, not the only path — the OS may
+  // never schedule it.
+  useEffect(() => {
+    if (!artifacts) return;
+    const maybeCheck = () => {
+      if (dueForCheck(artifacts.installed, new Date())) void runUpdate(false);
+    };
+    maybeCheck();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') maybeCheck();
+    });
+    return () => sub.remove();
+  }, [artifacts, runUpdate]);
 
   const finishOnboarding = useCallback(
     async (allowLocation: boolean) => {

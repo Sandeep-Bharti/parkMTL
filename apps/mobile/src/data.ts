@@ -4,17 +4,26 @@
  * MapLibre Native reads PMTiles by byte range, which means it needs a real file
  * and a fully-qualified `pmtiles://file://…` URL. Android's AssetManager cannot
  * serve ranged reads at all, so every artifact is materialised into the app's
- * document directory before the map is told about it. Phase 6 will replace the
- * bundled copies with downloads into the same place, so nothing above this
- * layer has to change.
+ * document directory before the map is told about it.
+ *
+ * The app carries data in its bundle and can also download newer data, so this
+ * module owns the decision between them — see `installed.ts` for the rule, and
+ * for the bug that motivated it.
  */
 
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SQLite from 'expo-sqlite';
 
-import type { Rule } from '@parkmtl/rules-core';
-import type { RuleCombo } from '@parkmtl/rules-core';
+import type { Rule, RuleCombo } from '@parkmtl/rules-core';
+
+import {
+  artifactNames,
+  parseRecord,
+  shouldInstallBundle,
+  type BuildStamp,
+  type InstalledRecord,
+} from './installed.ts';
 
 /** `file://…` form, which is what expo-file-system works in. */
 export const DATA_DIR = `${FileSystem.documentDirectory}parkmtl`;
@@ -25,7 +34,10 @@ export const DATA_DIR = `${FileSystem.documentDirectory}parkmtl`;
  */
 const DATA_PATH = DATA_DIR.replace(/^file:\/\//, '');
 
-const DB_NAME = 'montreal.sqlite';
+export const RECORD_PATH = `${DATA_DIR}/installed.json`;
+
+/** The basemap never changes with the data, so it keeps one fixed name. */
+const BASEMAP = 'montreal-base.pmtiles';
 
 export interface Artifacts {
   /** `pmtiles://file://…` URL for the parking data tileset. */
@@ -35,6 +47,8 @@ export interface Artifacts {
   rules: Rule[];
   combos: RuleCombo[];
   meta: Record<string, string>;
+  /** Which copy this is, and where it came from. */
+  installed: InstalledRecord;
   /**
    * Left open for the lifetime of the app.
    *
@@ -45,13 +59,22 @@ export interface Artifacts {
   db: SQLite.SQLiteDatabase;
 }
 
-/**
- * Copy a bundled asset into the document directory, once.
- *
- * `Asset.downloadAsync` already puts the file in the cache directory, but the
- * cache is evictable and the path is not stable across launches, so the file is
- * copied somewhere it will survive.
- */
+export async function readRecord(): Promise<InstalledRecord | null> {
+  try {
+    const info = await FileSystem.getInfoAsync(RECORD_PATH);
+    if (!info.exists) return null;
+    return parseRecord(await FileSystem.readAsStringAsync(RECORD_PATH));
+  } catch {
+    return null;
+  }
+}
+
+export async function writeRecord(record: InstalledRecord): Promise<void> {
+  await FileSystem.makeDirectoryAsync(DATA_DIR, { intermediates: true }).catch(() => {});
+  await FileSystem.writeAsStringAsync(RECORD_PATH, JSON.stringify(record));
+}
+
+/** Copy a bundled asset to a specific name, if it is not already there. */
 async function materialise(assetModule: number, name: string): Promise<string> {
   const target = `${DATA_DIR}/${name}`;
 
@@ -67,42 +90,60 @@ async function materialise(assetModule: number, name: string): Promise<string> {
 }
 
 /**
- * Drop the materialised copies when the shipped data has moved on.
+ * Remove artifact files that no build refers to any more.
  *
- * Tiles and dictionary must come from the same build — that is what
- * `ruleDictVersion` guarantees — so they are replaced as a set, never one at a
- * time. Without this, rebuilding the artifacts would leave the app reading
- * yesterday's copies and colouring the city against the wrong dictionary.
+ * Versioned names mean a superseded set lingers after an update; without this,
+ * every refresh would leave another 18 MB behind. The basemap and the record
+ * are never swept.
  */
-async function clearIfStale(version: string): Promise<void> {
-  const stampPath = `${DATA_DIR}/VERSION`;
-  const stamp = await FileSystem.getInfoAsync(stampPath);
-
-  if (stamp.exists) {
-    const current = await FileSystem.readAsStringAsync(stampPath);
-    if (current === version) return;
-    await FileSystem.deleteAsync(DATA_DIR, { idempotent: true });
+async function sweep(keep: Set<string>): Promise<void> {
+  try {
+    const entries = await FileSystem.readDirectoryAsync(DATA_DIR);
+    for (const name of entries) {
+      if (keep.has(name) || name === BASEMAP || name === 'installed.json') continue;
+      if (!/^montreal-.*\.(sqlite|pmtiles)$/.test(name)) continue;
+      await FileSystem.deleteAsync(`${DATA_DIR}/${name}`, { idempotent: true });
+    }
+  } catch {
+    // Cleanup is housekeeping; failing it must not stop the app from starting.
   }
-
-  await FileSystem.makeDirectoryAsync(DATA_DIR, { intermediates: true }).catch(() => {});
-  await FileSystem.writeAsStringAsync(stampPath, version);
 }
 
 export async function loadArtifacts(): Promise<Artifacts> {
   await FileSystem.makeDirectoryAsync(DATA_DIR, { intermediates: true }).catch(() => {});
 
-  const manifest = require('../assets/data/manifest.json') as { ruleDictVersion: string };
-  await clearIfStale(manifest.ruleDictVersion);
+  const manifest = require('../assets/data/manifest.json') as BuildStamp;
+  const existing = await readRecord();
 
-  const [dataTiles, baseTiles] = await Promise.all([
-    materialise(require('../assets/data/montreal.pmtiles'), 'montreal.pmtiles'),
-    materialise(require('../assets/data/montreal-base.pmtiles'), 'montreal-base.pmtiles'),
-    materialise(require('../assets/data/montreal.sqlite'), DB_NAME),
-  ]);
+  // Install the bundled copy only when it is genuinely newer. Anything already
+  // on disk that is newer came from a download and must survive.
+  let record: InstalledRecord;
+  if (shouldInstallBundle(manifest, existing)) {
+    const names = artifactNames(manifest.ruleDictVersion);
+    await Promise.all([
+      materialise(require('../assets/data/montreal.pmtiles'), names.tiles),
+      materialise(require('../assets/data/montreal.sqlite'), names.db),
+    ]);
+    record = {
+      ruleDictVersion: manifest.ruleDictVersion,
+      exportDate: manifest.exportDate,
+      builtAt: manifest.builtAt ?? new Date(0).toISOString(),
+      source: 'bundle',
+      ...(existing?.lastCheckedAt ? { lastCheckedAt: existing.lastCheckedAt } : {}),
+    };
+    await writeRecord(record);
+  } else {
+    record = existing!;
+  }
 
-  // `databaseName` is a file name and `directory` is the folder holding it —
-  // not two halves of a path.
-  const db = await SQLite.openDatabaseAsync(DB_NAME, undefined, DATA_PATH);
+  // The basemap is bundled and fixed; it is also the 62 MB that must never be
+  // re-copied on a data refresh.
+  const baseTiles = await materialise(require('../assets/data/montreal-base.pmtiles'), BASEMAP);
+
+  const names = artifactNames(record.ruleDictVersion);
+  await sweep(new Set([names.db, names.tiles]));
+
+  const db = await SQLite.openDatabaseAsync(names.db, undefined, DATA_PATH);
 
   const ruleRows = await db.getAllAsync<{ json: string }>('SELECT json FROM rules');
   const rules = ruleRows.map((r) => JSON.parse(r.json) as Rule);
@@ -125,11 +166,12 @@ export async function loadArtifacts(): Promise<Artifacts> {
 
   return {
     // MapLibre Native needs the URL inside pmtiles:// fully qualified.
-    dataTilesUrl: `pmtiles://file://${dataTiles.replace(/^file:\/\//, '')}`,
+    dataTilesUrl: `pmtiles://file://${DATA_PATH}/${names.tiles}`,
     baseTilesUrl: `pmtiles://file://${baseTiles.replace(/^file:\/\//, '')}`,
     rules,
     combos,
     meta,
+    installed: record,
     db,
   };
 }

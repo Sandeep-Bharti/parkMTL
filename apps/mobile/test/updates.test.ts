@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { shouldInstall, SUPPORTED_SCHEMA, type Manifest } from '../src/updates.ts';
+import { shouldInstall, SUPPORTED_SCHEMA, type Manifest } from '../src/manifest.ts';
 
 const manifest = (over: Partial<Manifest> = {}): Manifest => ({
   schemaVersion: SUPPORTED_SCHEMA,

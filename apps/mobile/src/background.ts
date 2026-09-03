@@ -13,37 +13,51 @@
 
 import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
-import * as FileSystem from 'expo-file-system/legacy';
 
-import { DATA_BASE_URL, checkForUpdate } from './updates.ts';
-import { DATA_DIR } from './data.ts';
+import { DATA_BASE_URL, checkForUpdate, describeOutcome } from './updates.ts';
+import { DATA_DIR, readRecord, writeRecord } from './data.ts';
+import { artifactNames } from './installed.ts';
 
 export const REFRESH_TASK = 'parkmtl-data-refresh';
 
-/**
- * The version currently on disk, or null when nothing has been installed.
- * Read from the stamp rather than from the database so the check costs nothing.
- */
-async function installedVersion(): Promise<string | null> {
-  try {
-    const stamp = await FileSystem.getInfoAsync(`${DATA_DIR}/VERSION`);
-    if (!stamp.exists) return null;
-    return await FileSystem.readAsStringAsync(`${DATA_DIR}/VERSION`);
-  } catch {
-    return null;
-  }
-}
-
 TaskManager.defineTask(REFRESH_TASK, async () => {
   try {
-    const outcome = await checkForUpdate(DATA_BASE_URL, DATA_DIR, await installedVersion());
+    const installed = await readRecord();
+    // Nothing installed yet means the app has never completed a first launch;
+    // there is no build to compare against, so leave it to the foreground.
+    if (!installed) return BackgroundTask.BackgroundTaskResult.Success;
 
-    // `Failed` is reported as success to the OS on purpose: a missed refresh is
-    // normal (no signal, server down) and repeatedly reporting failure makes
-    // the system back off from scheduling us at all.
-    return outcome.status === 'updated'
-      ? BackgroundTask.BackgroundTaskResult.Success
-      : BackgroundTask.BackgroundTaskResult.Success;
+    const outcome = await checkForUpdate(
+      DATA_BASE_URL,
+      DATA_DIR,
+      installed.ruleDictVersion,
+      artifactNames,
+    );
+    const note = describeOutcome(outcome);
+
+    if (outcome.status === 'updated' && outcome.manifest) {
+      // The files are in place; recording the new build is what makes the next
+      // launch pick them up. Written only after the download succeeded.
+      await writeRecord({
+        ruleDictVersion: outcome.manifest.ruleDictVersion,
+        exportDate: outcome.manifest.exportDate,
+        builtAt: outcome.manifest.builtAt,
+        source: 'download',
+        lastCheckedAt: new Date().toISOString(),
+        lastOutcome: note,
+      });
+    } else {
+      await writeRecord({
+        ...installed,
+        lastCheckedAt: new Date().toISOString(),
+        lastOutcome: note,
+      });
+    }
+
+    // A missed refresh is reported as success on purpose: no signal or a server
+    // hiccup is normal, and repeatedly reporting failure makes iOS back off
+    // from scheduling the task at all.
+    return BackgroundTask.BackgroundTaskResult.Success;
   } catch {
     return BackgroundTask.BackgroundTaskResult.Failed;
   }

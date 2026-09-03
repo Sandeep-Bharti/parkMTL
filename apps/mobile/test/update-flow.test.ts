@@ -15,7 +15,7 @@ import { createServer, type Server } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
 
-import { shouldInstall, type Manifest } from '../src/updates.ts';
+import { shouldInstall, type Manifest } from '../src/manifest.ts';
 
 const OUT = fileURLToPath(new URL('../../../data/out/', import.meta.url));
 const built = existsSync(`${OUT}manifest.json`) && existsSync(`${OUT}montreal.pmtiles`);
