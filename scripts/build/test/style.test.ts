@@ -62,7 +62,7 @@ const AT = new Date('2026-09-07T15:00:00Z');
  */
 function styleWithDataLayers(rules: Rule[], combos: RuleCombo[], dark = false) {
   const base = style(dark);
-  const paint = buildDataPaint(rules, combos, AT, dark);
+  const paint = buildDataPaint(rules, combos, [], AT, dark);
   return {
     ...base,
     layers: [
@@ -125,7 +125,7 @@ describe('buildDataPaint', () => {
   it('degrades to a flat colour when the dictionary is empty', () => {
     // `match` with no branches is invalid, so the degenerate case must not emit
     // an expression at all.
-    const paint = buildDataPaint([], [], AT, false);
+    const paint = buildDataPaint([], [], [], AT, false);
     assert.match(String(paint.poles['circle-color']), /^#[0-9a-f]{6}$/i);
     assert.deepEqual(validateStyleMin(styleWithDataLayers([], []) as never), []);
   });
@@ -140,12 +140,15 @@ describe('buildDataPaint with the real dictionary', { skip: !existsSync(DB) }, (
     assert.deepEqual(validateStyleMin(styleWithDataLayers(rules, combos) as never), []);
   });
 
-  it('paints every resolved rule, and keeps a fallback for the rest', () => {
+  it('paints every combination, and keeps a fallback for the rest', () => {
     const { rules, combos } = load();
-    const expr = buildDataPaint(rules, combos, AT, false).poles['circle-color'] as unknown[];
+    const expr = buildDataPaint(rules, combos, [], AT, false).poles['circle-color'] as unknown[];
 
     assert.equal(expr[0], 'match');
-    assert.deepEqual(expr[1], ['get', 'ruleId']);
+    // Poles colour by combination, not by rule: the verdict belongs to the
+    // pole, and matching per rule let one lapsed panel paint over a standing
+    // prohibition on the same post.
+    assert.deepEqual(expr[1], ['get', 'comboId']);
 
     // ['match', input, k, v, k, v, …, fallback] — an odd tail means the
     // fallback is present, which is what stops an unknown id rendering as null.
@@ -156,8 +159,8 @@ describe('buildDataPaint with the real dictionary', { skip: !existsSync(DB) }, (
   it('repaints to different colours at a different instant', () => {
     // The scrubber's whole premise: the same features, a different verdict.
     const { rules, combos } = load();
-    const noon = buildDataPaint(rules, combos, new Date('2026-09-07T16:00:00Z'), false);
-    const threeAm = buildDataPaint(rules, combos, new Date('2026-09-07T07:00:00Z'), false);
+    const noon = buildDataPaint(rules, combos, [], new Date('2026-09-07T16:00:00Z'), false);
+    const threeAm = buildDataPaint(rules, combos, [], new Date('2026-09-07T07:00:00Z'), false);
     assert.notDeepEqual(noon.poles['circle-color'], threeAm.poles['circle-color']);
   });
 });

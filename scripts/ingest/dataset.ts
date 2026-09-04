@@ -165,36 +165,52 @@ export function amdRuleIds(codes: Iterable<string>): Map<string, number> {
   return new Map(sorted.map((code, i) => [code, AMD_ID_BASE + i]));
 }
 
-/**
- * Name each distinct set of regulations with one integer.
- *
- * A paid bay carries up to sixteen regulations, and a MapLibre `match`
- * expression cannot evaluate a list — so the bay carries a `comboId` instead.
- * Only ~1,250 distinct combinations exist, so folding rule statuses into
- * combination statuses stays a few thousand map lookups per frame.
- *
- * Keyed by the sorted code list so the numbering is reproducible.
- */
-export function buildCombos(
-  spaces: Array<{ ruleCodes: string[] }>,
-  ruleIds: Map<string, number>,
-): { byKey: Map<string, number>; combos: Array<{ id: number; ruleIds: number[] }> } {
-  const keyOf = (codes: string[]) => [...new Set(codes)].sort().join('|');
-
-  const keys = [...new Set(spaces.map((s) => keyOf(s.ruleCodes)))].sort();
-  const byKey = new Map(keys.map((key, i) => [key, i]));
-
-  const combos = keys.map((key, id) => ({
-    id,
-    ruleIds: (key === '' ? [] : key.split('|'))
-      .map((code) => ruleIds.get(code))
-      .filter((v): v is number => v !== undefined),
-  }));
-
-  return { byKey, combos };
+export interface Combo {
+  id: number;
+  ruleIds: number[];
 }
 
-/** The combo key for one space, matching `buildCombos`. */
-export function comboKey(codes: string[]): string {
-  return [...new Set(codes)].sort().join('|');
+/**
+ * Name each distinct set of rules with one integer.
+ *
+ * A map feature can only be matched on a single value, but a verdict belongs to
+ * a *place*, not to one rule: a pole's answer is the most restrictive of every
+ * panel on it, and a paid bay carries up to sixteen regulations at once. So the
+ * feature carries a `comboId` naming its whole set, and the set is folded to a
+ * status by `statusByComboId`.
+ *
+ * Colouring per rule instead of per place is what let a pole render green — one
+ * panel's window having closed — while another panel forbade parking outright.
+ *
+ * Keyed by the sorted rule ids, so poles and bays share one namespace and the
+ * numbering is reproducible across builds.
+ */
+export function buildCombos(sets: Iterable<number[]>): {
+  idFor: (ruleIds: number[]) => number;
+  combos: Combo[];
+} {
+  const keys = new Set<string>();
+  for (const ids of sets) keys.add(comboKey(ids));
+
+  const sorted = [...keys].sort();
+  const byKey = new Map(sorted.map((key, i) => [key, i]));
+
+  const combos: Combo[] = sorted.map((key, id) => ({
+    id,
+    ruleIds: key === '' ? [] : key.split(',').map(Number),
+  }));
+
+  return {
+    idFor: (ruleIds) => {
+      const id = byKey.get(comboKey(ruleIds));
+      if (id === undefined) throw new Error(`no combo for [${ruleIds}]`);
+      return id;
+    },
+    combos,
+  };
+}
+
+/** Canonical key for a rule set: sorted, deduplicated, comma separated. */
+export function comboKey(ruleIds: number[]): string {
+  return [...new Set(ruleIds)].sort((a, b) => a - b).join(',');
 }

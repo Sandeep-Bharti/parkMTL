@@ -92,9 +92,11 @@ function matchByValue<T extends string | number>(
  *
  * `["zoom"]` is only legal as the input to a *top-level* `interpolate`, so the
  * tier multiplication cannot wrap it — the interpolation goes outside and each
- * stop carries its own per-feature match. That repeats the id groups once per
- * stop, which is the price of a legal expression; the grouping in
- * `matchByValue` is what keeps it affordable.
+ * stop carries its own per-feature match, repeating the id groups once per
+ * stop. With ~10,000 combinations that repetition is the dominant cost of the
+ * whole paint object, so the stops are kept to two and only radius pays it:
+ * stroke width is uniform, and the dim/bright half of the emphasis rides on
+ * `circle-opacity`, which needs no zoom and so is listed once.
  */
 function zoomStops(
   stops: Array<[zoom: number, size: number]>,
@@ -182,13 +184,18 @@ export interface DataPaint {
  */
 export function buildDataPaint(
   rules: Rule[],
-  combos: RuleCombo[],
+  poleCombos: RuleCombo[],
+  bayCombos: RuleCombo[],
   at: Date,
   dark: boolean,
 ): DataPaint {
+  // Both layers now colour by combination, not by rule. A verdict belongs to a
+  // place — the most restrictive of every panel on a pole, or every regulation
+  // on a bay — and colouring per rule let a pole render green because one
+  // panel's window had closed while another forbade parking outright.
   const byRule = statusByRuleId(rules, at, TIME_ZONE);
-
-  const byCombo = statusByComboId(byRule, combos);
+  const byPole = statusByComboId(byRule, poleCombos);
+  const byBay = statusByComboId(byRule, bayCombos);
 
   const halo = surface(dark).halo;
 
@@ -211,30 +218,30 @@ export function buildDataPaint(
     return { scale, opacity, stroke };
   };
 
-  const poleTiers = tiers(byRule);
-  const bayTiers = tiers(byCombo);
+  const poleTiers = tiers(byPole);
+  const bayTiers = tiers(byBay);
 
   return {
     poles: {
-      'circle-radius': scaledByZoom('ruleId', poleTiers.scale, [[13, 3], [16, 7], [18, 10]]),
+      'circle-radius': scaledByZoom('comboId', poleTiers.scale, [[13, 3], [18, 10]]),
       'circle-color': matchByValue(
-        'ruleId',
-        [...byRule].map(([id, s]) => [id, STATUS_COLOR[s] ?? FALLBACK_COLOR] as [number, string]),
+        'comboId',
+        [...byPole].map(([id, v]) => [id, STATUS_COLOR[v] ?? FALLBACK_COLOR] as [number, string]),
         FALLBACK_COLOR,
       ),
-      'circle-opacity': matchByValue('ruleId', poleTiers.opacity, 1),
-      'circle-stroke-width': scaledByZoom('ruleId', poleTiers.stroke, [[13, 0], [16, 1.4], [18, 2]]),
+      'circle-opacity': matchByValue('comboId', poleTiers.opacity, 1),
+      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 13, 0, 18, 1.8],
       'circle-stroke-color': halo,
     },
     bays: {
-      'circle-radius': scaledByZoom('comboId', bayTiers.scale, [[13, 2.5], [16, 5.5], [18, 8]]),
+      'circle-radius': scaledByZoom('comboId', bayTiers.scale, [[13, 2.5], [18, 8]]),
       'circle-color': matchByValue(
         'comboId',
-        [...byCombo].map(([id, v]) => [id, STATUS_COLOR[v] ?? FALLBACK_COLOR] as [number, string]),
+        [...byBay].map(([id, v]) => [id, STATUS_COLOR[v] ?? FALLBACK_COLOR] as [number, string]),
         FALLBACK_COLOR,
       ),
       'circle-opacity': matchByValue('comboId', bayTiers.opacity, 1),
-      'circle-stroke-width': scaledByZoom('comboId', bayTiers.stroke, [[13, 0], [16, 1], [18, 1.5]]),
+      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 13, 0, 18, 1.4],
       'circle-stroke-color': halo,
     },
   };

@@ -141,7 +141,7 @@ function Parkmtl() {
   // Changes on every scrubber tick; only the layers' paint props are updated.
   const paint = useMemo(() => {
     if (!artifacts) return null;
-    return buildDataPaint(artifacts.rules, artifacts.combos, at, dark);
+    return buildDataPaint(artifacts.rules, artifacts.poleCombos, artifacts.bayCombos, at, dark);
   }, [artifacts, at, dark]);
 
   const rulesById = useMemo(() => {

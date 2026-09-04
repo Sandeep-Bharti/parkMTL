@@ -17,6 +17,19 @@ import type { Translator } from './i18n.ts';
  * and dim. That reads as figure against ground before colour is processed at
  * all, and it survives any form of colour blindness.
  */
+/**
+ * A tradeoff worth recording, because it looks like an oversight otherwise.
+ *
+ * `free` renders *darker* than `no_parking` under deuteranopia (simulated
+ * lightness 0.13 against 0.21), which inverts the "available is brighter"
+ * reading. Brightening it to `#2bb36a` fixes that ordering — but drops contrast
+ * against the light basemap from 3.98 to 2.00, below the 3.0 floor for a
+ * graphical object. The two requirements are contradictory on a pale ground:
+ * contrast wants dark, "brightest" wants light.
+ *
+ * So lightness is not the colour-blind cue here. Size and the halo are, which
+ * is why they are tiered as sharply as they are.
+ */
 export const STATUS_COLOR: Record<Status, string> = {
   free: '#127a45',
   paid: '#1f6fd0',
@@ -57,14 +70,27 @@ export interface Emphasis {
 /**
  * How loudly to draw each status.
  *
- * Roughly 37% of the city is a prohibition at any moment and about 44% is
- * available. Drawn at equal weight that is confetti; drawn in tiers, the eye
- * lands on where you can actually park.
+ * Three tiers, because availability is not one thing and a prohibition is not
+ * noise.
+ *
+ * The first attempt used two tiers and over-corrected: at `scale 0.62 /
+ * opacity 0.55`, prohibitions were 37% of the city's poles but under 3% of the
+ * visible ink — they blended into the basemap far enough to stop reading as red
+ * at all. For an app whose rule is *never show a restricted spot as clear*,
+ * whispering the prohibition is the worse error. They are now clearly legible,
+ * and merely subordinate.
+ *
+ * `free` sits above `paid`/`limited` because downtown is overwhelmingly metered
+ * and time-capped; if the two share a tier, the thing people actually hunt for
+ * is lost in a field of amber.
  */
 export function emphasisFor(status: Status): Emphasis {
-  if (isAvailable(status)) return { scale: 1, opacity: 1, stroke: 1 };
-  if (status === 'unknown') return { scale: 0.82, opacity: 0.9, stroke: 0.6 };
-  return { scale: 0.62, opacity: 0.55, stroke: 0 };
+  if (status === 'free') return { scale: 1, opacity: 1, stroke: 1 };
+  if (isAvailable(status)) return { scale: 0.88, opacity: 0.95, stroke: 0.8 };
+  // Never quieter than a plain restriction: an unreadable sign is the one case
+  // where the driver has to go and look.
+  if (status === 'unknown') return { scale: 0.85, opacity: 0.95, stroke: 0.7 };
+  return { scale: 0.78, opacity: 0.82, stroke: 0.35 };
 }
 
 export function statusLabel(status: Status, t: Translator): string {

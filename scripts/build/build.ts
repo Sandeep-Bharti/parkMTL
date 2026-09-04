@@ -25,7 +25,6 @@ import {
   buildCombos,
   buildPoles,
   buildRuleDict,
-  comboKey,
   loadAmd,
   loadSignage,
   ruleIdOf,
@@ -69,9 +68,25 @@ const amdRules: Rule[] = [...amd.rules]
 
 const rules: Rule[] = [...signRules, ...amdRules];
 
-// A bay can be governed by up to 16 regulations at once and a map `match`
-// cannot evaluate a list, so each distinct set of regulations gets one id.
-const { byKey: comboByKey, combos } = buildCombos(amd.spaces, amdIds);
+/**
+ * The rules governing one pole: every panel on it except the sub-panels, which
+ * modify the panel above and are not rules in their own right.
+ */
+const poleRuleIds = (pole: { signs: Row[] }): number[] =>
+  pole.signs.filter((sign) => !isSubPanel(sign)).map(ruleIdOf).filter(Number.isInteger);
+
+/**
+ * One combo namespace for poles and bays alike.
+ *
+ * A verdict belongs to a *place*, not to a rule. Colouring per rule is what let
+ * a pole render green because one panel's window had closed, while another
+ * panel on the same pole forbade parking outright — the map disagreeing with
+ * the detail sheet on about one pole in six.
+ */
+const { idFor: comboIdFor, combos } = buildCombos([
+  ...[...poles.values()].map(poleRuleIds),
+  ...amd.spaces.map((s) => s.ruleCodes.map((c) => amdIds.get(c)!).filter(Number.isInteger)),
+]);
 
 console.log(`  rules      ${rules.length} (${signRules.length} signage + ${amdRules.length} AMD)`);
 console.log(`  combos     ${combos.length}`);
@@ -110,25 +125,23 @@ function feature(lon: number, lat: number, properties: Record<string, unknown>):
   });
 }
 
+// One feature per pole, not per sign. Stacking a dot per panel at a single
+// coordinate meant whichever drew last decided the colour, and once available
+// parking was drawn larger than a prohibition, green reliably covered red.
 const poleLines: string[] = [];
 for (const [poleId, pole] of poles) {
-  for (const sign of pole.signs) {
-    if (isSubPanel(sign)) continue;
-    poleLines.push(
-      feature(pole.lon, pole.lat, {
-        pole: poleId,
-        ruleId: ruleIdOf(sign),
-        arrow: Number(sign.FLECHE_PAN) || 0,
-      }),
-    );
-  }
+  const ruleIds = poleRuleIds(pole);
+  if (ruleIds.length === 0) continue;
+  poleLines.push(
+    feature(pole.lon, pole.lat, { pole: poleId, comboId: comboIdFor(ruleIds) }),
+  );
 }
 
 // The marked-bay centre is the better map position than the pole itself.
 const bayLines = amd.spaces.map((s) =>
   feature(s.centreLon, s.centreLat, {
     space: s.id,
-    comboId: comboByKey.get(comboKey(s.ruleCodes))!,
+    comboId: comboIdFor(s.ruleCodes.map((c) => amdIds.get(c)!).filter(Number.isInteger)),
     paid: isPaidSpace(s, amd.rules) ? 1 : 0,
   }),
 );
@@ -191,7 +204,7 @@ db.exec(`
     space_id TEXT NOT NULL,
     rule_id INTEGER NOT NULL
   );
-  -- comboId is what the bay tiles carry; this expands one back to its rules.
+  -- comboId is what both tile layers carry; this expands one back to its rules.
   CREATE TABLE combo_rules (
     combo_id INTEGER NOT NULL,
     rule_id INTEGER NOT NULL
@@ -245,7 +258,7 @@ for (const space of amd.spaces) {
     space.maxTariffCents ?? null,
     space.exploitation,
     space.paired ?? null,
-    comboByKey.get(comboKey(space.ruleCodes))!,
+    comboIdFor(space.ruleCodes.map((c) => amdIds.get(c)!).filter(Number.isInteger)),
   );
   for (const code of space.ruleCodes) {
     const id = amdIds.get(code);

@@ -45,7 +45,17 @@ export interface Artifacts {
   /** `pmtiles://file://…` URL for the offline basemap. */
   baseTilesUrl: string;
   rules: Rule[];
-  combos: RuleCombo[];
+  /**
+   * Combinations split by the layer that uses them.
+   *
+   * Pole combinations are made only of signage rule ids and bay combinations
+   * only of AMD ids, so the two sets are disjoint. Keeping them apart means
+   * each map layer's paint expression lists only its own ids — with ~10,000
+   * combinations city-wide, listing both in both layers doubled the paint
+   * payload for nothing.
+   */
+  poleCombos: RuleCombo[];
+  bayCombos: RuleCombo[];
   meta: Record<string, string>;
   /** Which copy this is, and where it came from. */
   installed: InstalledRecord;
@@ -157,7 +167,16 @@ export async function loadArtifacts(): Promise<Artifacts> {
     list.push(row.rule_id);
     byCombo.set(row.combo_id, list);
   }
-  const combos: RuleCombo[] = [...byCombo].map(([id, ruleIds]) => ({ id, ruleIds }));
+  const bayComboIds = new Set(
+    (await db.getAllAsync<{ combo_id: number }>('SELECT DISTINCT combo_id FROM spaces')).map(
+      (r) => r.combo_id,
+    ),
+  );
+  const poleCombos: RuleCombo[] = [];
+  const bayCombos: RuleCombo[] = [];
+  for (const [id, ruleIds] of byCombo) {
+    (bayComboIds.has(id) ? bayCombos : poleCombos).push({ id, ruleIds });
+  }
 
   const metaRows = await db.getAllAsync<{ key: string; value: string }>(
     'SELECT key, value FROM meta',
@@ -169,7 +188,8 @@ export async function loadArtifacts(): Promise<Artifacts> {
     dataTilesUrl: `pmtiles://file://${DATA_PATH}/${names.tiles}`,
     baseTilesUrl: `pmtiles://file://${baseTiles.replace(/^file:\/\//, '')}`,
     rules,
-    combos,
+    poleCombos,
+    bayCombos,
     meta,
     installed: record,
     db,
