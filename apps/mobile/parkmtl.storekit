@@ -1,0 +1,79 @@
+{
+  "identifier" : "A3E1F0C2-7B4D-4E6A-9C11-2D5F8A0B3E77",
+  "nonRenewingSubscriptions" : [
+  ],
+  "products" : [
+    {
+      "displayPrice" : "2.99",
+      "familyShareable" : false,
+      "internalID" : "5C1A9D30-6F82-4B47-A0E3-91B7C4D2E508",
+      "localizations" : [
+        {
+          "description" : "A small one-time contribution to support development.",
+          "displayName" : "Small contribution",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "ca.parkmtl.app.tip.small",
+      "referenceName" : "Small contribution",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "14.99",
+      "familyShareable" : false,
+      "internalID" : "8B2E7A15-3C94-4D6F-8E01-77A5B9C3F210",
+      "localizations" : [
+        {
+          "description" : "A larger one-time contribution to support development.",
+          "displayName" : "Large contribution",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "ca.parkmtl.app.tip.large",
+      "referenceName" : "Large contribution",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_storeKitErrors" : [
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "D7F4B1C8-2A63-4E95-B0D2-6C81E5A9370F",
+      "localizations" : [
+      ],
+      "name" : "Support",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+          ],
+          "codeOffers" : [
+          ],
+          "displayPrice" : "4.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "F0A6C293-51D7-4B8E-9A34-C2E7B815D460",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Support ongoing development as a monthly supporter.",
+              "displayName" : "Monthly supporter",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "ca.parkmtl.app.support.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Monthly supporter",
+          "subscriptionGroupID" : "D7F4B1C8-2A63-4E95-B0D2-6C81E5A9370F",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

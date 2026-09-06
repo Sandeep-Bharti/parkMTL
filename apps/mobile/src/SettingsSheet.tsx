@@ -40,6 +40,7 @@ interface Props {
   ruleCount: number;
   updateState: UpdateState;
   onCheckUpdates: () => void;
+  onOpenSupport: () => void;
   dark: boolean;
   onClose: () => void;
 }
@@ -53,6 +54,7 @@ export function SettingsSheet({
   ruleCount,
   updateState,
   onCheckUpdates,
+  onOpenSupport,
   dark,
   onClose,
 }: Props) {
@@ -79,6 +81,21 @@ export function SettingsSheet({
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
+        {/* First, because it is the one thing here that is a request rather
+            than a control — and it is easy to miss further down. */}
+        <Pressable onPress={onOpenSupport} style={styles.supportRow} accessibilityRole="button">
+          <Text style={styles.supportIcon}>☕</Text>
+          <View style={styles.supportText}>
+            <Text style={[styles.supportTitle, dark && styles.textDark]}>
+              {t('support.open')}
+            </Text>
+            <Text style={[styles.supportHint, dark && styles.dimDark]}>
+              {t('support.openHint')}
+            </Text>
+          </View>
+          <Text style={styles.supportChevron}>›</Text>
+        </Pressable>
+
         <Text style={[styles.sectionLabel, dark && styles.dimDark]}>
           {t('settings.language')}
         </Text>
@@ -170,6 +187,20 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '700' },
   close: { fontSize: 17, color: '#8a8f98', paddingHorizontal: 4 },
   body: { paddingHorizontal: 18, paddingTop: 10 },
+  supportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(47,111,208,0.10)',
+  },
+  supportIcon: { fontSize: 22 },
+  supportText: { flex: 1 },
+  supportTitle: { fontSize: 15, fontWeight: '600' },
+  supportHint: { fontSize: 11, color: '#5b626e', marginTop: 1 },
+  supportChevron: { fontSize: 22, color: '#8a8f98', fontWeight: '300' },
   body_: { fontSize: 14 },
   textDark: { color: '#e8eaed' },
   dimDark: { color: '#a2a9b4' },

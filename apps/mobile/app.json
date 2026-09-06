@@ -68,6 +68,7 @@
       "expo-dev-client",
       "expo-sqlite",
       "expo-background-task",
+      "expo-iap",
       [
         "@maplibre/maplibre-react-native",
         {
@@ -78,7 +79,8 @@
             "nativeVersion": "6.26.0"
           }
         }
-      ]
+      ],
+      "./plugins/withStoreKitConfig"
     ],
     "assetBundlePatterns": [
       "**/*"

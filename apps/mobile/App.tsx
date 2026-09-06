@@ -51,6 +51,7 @@ import { DetailSheet, type Selection } from './src/DetailSheet.tsx';
 import { TimeScrubber } from './src/TimeScrubber.tsx';
 import { SearchBar } from './src/SearchBar.tsx';
 import { SettingsSheet, type UpdateState } from './src/SettingsSheet.tsx';
+import { SupportSheet } from './src/SupportSheet.tsx';
 import { AnswerCard, type CentreAnswer } from './src/AnswerCard.tsx';
 import { Onboarding } from './src/Onboarding.tsx';
 import { loadPlaces, type Place } from './src/search.ts';
@@ -91,6 +92,7 @@ function Parkmtl() {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [tracking, setTracking] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
   const [scrubberOpen, setScrubberOpen] = useState(false);
   const [languageOverride, setLanguageOverride] = useState<Language | null>(null);
   const [updateState, setUpdateState] = useState<UpdateState>('idle');
@@ -369,7 +371,7 @@ function Parkmtl() {
     );
   }
 
-  const sheetOpen = selection !== null || settingsOpen;
+  const sheetOpen = selection !== null || settingsOpen || supportOpen;
 
   return (
     <View style={styles.root}>
@@ -518,9 +520,17 @@ function Parkmtl() {
           ruleCount={artifacts.rules.length}
           updateState={updateState}
           onCheckUpdates={onCheckUpdates}
+          onOpenSupport={() => {
+            setSettingsOpen(false);
+            setSupportOpen(true);
+          }}
           dark={dark}
           onClose={() => setSettingsOpen(false)}
         />
+      )}
+
+      {supportOpen && (
+        <SupportSheet t={t} dark={dark} onClose={() => setSupportOpen(false)} />
       )}
 
       {onboarding && <Onboarding t={t} dark={dark} onDone={finishOnboarding} />}
