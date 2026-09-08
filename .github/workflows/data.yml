@@ -30,6 +30,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
+
+      # The ingest scripts are deliberately dependency-free, but `npm test`
+      # also runs apps/mobile's tests, which need expo-iap, MapLibre, etc.
+      # Without this the job only "worked" locally because node_modules was
+      # already sitting there from unrelated earlier installs.
+      - run: npm ci
 
       - name: Install tippecanoe
         run: sudo apt-get update && sudo apt-get install -y tippecanoe
