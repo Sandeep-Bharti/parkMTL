@@ -90,6 +90,12 @@
         "pmtiles",
         "sqlite"
       ]
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "fbbd940f-fa0f-4fe8-a88f-85cfa658f178"
+      }
+    },
+    "owner": "sandeep-bharti"
   }
 }

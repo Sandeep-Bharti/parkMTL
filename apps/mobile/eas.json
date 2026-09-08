@@ -31,11 +31,9 @@
   "submit": {
     "production": {
       "ios": {
-        "//": "appleId, ascAppId and appleTeamId are filled in by `eas submit` on first run, or set as EAS secrets. They are deliberately absent from the repo.",
         "language": "en-CA"
       },
       "android": {
-        "//": "serviceAccountKeyPath points at a Play service-account JSON that must never be committed.",
         "track": "internal",
         "releaseStatus": "draft"
       }
