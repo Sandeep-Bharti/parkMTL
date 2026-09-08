@@ -1,8 +1,8 @@
 # Release runbook
 
-Phase 7. Everything here needs credentials and paid developer accounts, so none
-of it has been executed — the configuration is in place and untested against the
-real services.
+Phase 7. The data pipeline (Phase 2) is live — see **Data hosting** below.
+Everything past that still needs paid developer accounts, so it is configured
+but unexecuted against the real services.
 
 ## What you need before anything works
 
@@ -11,10 +11,6 @@ real services.
 | Apple Developer Program | $99/yr | TestFlight, App Store |
 | Google Play Console | $25 once | Play internal testing |
 | Expo account | free tier fine | `eas build` runs on their infrastructure |
-
-`gh` is not installed and the repository has no remote, so the data pipeline's
-GitHub Releases publishing (Phase 2) is also not yet live. The app currently
-falls back to `http://localhost:8000` for updates — see **Data hosting** below.
 
 ## One-time setup
 
@@ -81,14 +77,24 @@ transmitted. There is no analytics SDK and no account.
 
 ## Data hosting
 
-Until the repo has a remote and CI publishes releases, `DATA_BASE_URL` in
-[apps/mobile/src/updates.ts](../apps/mobile/src/updates.ts) points at
-`localhost:8000`. Before shipping, set `EXPO_PUBLIC_DATA_URL` to the release
-asset base — the app reads it at build time.
+**Live.** The repo is pushed to
+[github.com/Sandeep-Bharti/parkMTL](https://github.com/Sandeep-Bharti/parkMTL),
+`.github/workflows/data.yml` has run for real, and
+`https://github.com/Sandeep-Bharti/parkMTL/releases/latest/download/manifest.json`
+resolves to a genuine published build — verified by fetching it and cross-
+checking its `artifacts.*.bytes` against the actual release asset sizes.
 
-Note that a release build hitting a plain-HTTP host will be blocked by App
-Transport Security. The published URL must be HTTPS, which GitHub Releases and
-any CDN already are.
+`preview` and `production` in [eas.json](../apps/mobile/eas.json) set
+`EXPO_PUBLIC_DATA_URL` to that base, so builds from those profiles get real
+updates with no manual step. `development` deliberately leaves it unset —
+`DATA_BASE_URL` in [apps/mobile/src/updates.ts](../apps/mobile/src/updates.ts)
+defaults to `null` in that case, which surfaces as "not configured" rather than
+failing obscurely against a host that isn't there; override it locally with
+`EXPO_PUBLIC_DATA_URL=http://localhost:8000` to test against a dev server.
+
+The scheduled workflow only fires from the **default branch**, and GitHub
+disables scheduled workflows after 60 days with no commits to the repo — the
+risk flagged earlier. Worth a periodic check that it's still firing.
 
 ## Still open before a public release
 
