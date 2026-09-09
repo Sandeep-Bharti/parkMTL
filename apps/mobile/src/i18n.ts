@@ -118,6 +118,8 @@ const STRINGS = {
     'settings.noSource': 'No update source configured',
     'settings.updateFailed': 'Could not check for updates',
     'settings.sources': 'Sources',
+    'settings.privacy': 'Privacy Policy',
+    'settings.terms': 'Terms of Use',
     'settings.close': 'Close',
 
     'disclaimer.short': 'Guidance only — the signs on the street are authoritative.',
@@ -233,6 +235,8 @@ const STRINGS = {
     'settings.noSource': 'Aucune source de mise à jour configurée',
     'settings.updateFailed': 'Vérification impossible',
     'settings.sources': 'Sources',
+    'settings.privacy': 'Politique de confidentialité',
+    'settings.terms': "Conditions d'utilisation",
     'settings.close': 'Fermer',
 
     'disclaimer.short':

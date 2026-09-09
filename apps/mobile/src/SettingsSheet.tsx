@@ -151,6 +151,16 @@ export function SettingsSheet({
           Données : Agence de mobilité durable de Montréal; Ville de Montréal (CC BY 4.0)
         </Text>
 
+        <View style={styles.legalRow}>
+          <Pressable onPress={() => Linking.openURL('https://sandeep-bharti.github.io/parkMTL/privacy.html')}>
+            <Text style={styles.link}>{t('settings.privacy')}</Text>
+          </Pressable>
+          <Text style={[styles.legalDot, dark && styles.dimDark]}>·</Text>
+          <Pressable onPress={() => Linking.openURL('https://sandeep-bharti.github.io/parkMTL/terms.html')}>
+            <Text style={styles.link}>{t('settings.terms')}</Text>
+          </Pressable>
+        </View>
+
         <Text style={[styles.disclaimer, dark && styles.dimDark]}>
           {t('disclaimer.long')}
         </Text>
@@ -236,6 +246,8 @@ const styles = StyleSheet.create({
   buttonText: { color: '#ffffff', fontSize: 13, fontWeight: '600' },
   link: { fontSize: 13, color: '#2f6fd0', paddingVertical: 4, lineHeight: 18 },
   licence: { fontSize: 11, color: '#5b626e', marginTop: 10, lineHeight: 16 },
+  legalRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
+  legalDot: { fontSize: 11, color: '#8a8f98' },
   disclaimer: {
     fontSize: 12,
     color: '#5b626e',

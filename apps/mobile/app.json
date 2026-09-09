@@ -15,7 +15,8 @@
         "NSLocationWhenInUseUsageDescription": "Shows which parking near you is free right now.",
         "BGTaskSchedulerPermittedIdentifiers": [
           "com.expo.modules.backgroundtask.processing"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       },
       "privacyManifests": {
         "NSPrivacyTracking": false,
