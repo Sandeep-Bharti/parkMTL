@@ -18,3 +18,7 @@ apps/*/android/
 .DS_Store
 .expo/
 dist/
+
+# Apple/Google credential files for eas submit. Paths are referenced from
+# eas.json (not secret); the files themselves must never be committed.
+apps/mobile/secrets/
