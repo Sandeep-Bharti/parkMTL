@@ -27,8 +27,13 @@ need "$OUT/montreal.pmtiles" "npm run tiles"
 need "$OUT/montreal.sqlite" "npm run build"
 need "$BASE/montreal-base.pmtiles" "scripts/build/basemap.sh"
 
-cp "$OUT/montreal.pmtiles" "$DEST/montreal.pmtiles"
-cp "$OUT/montreal.sqlite" "$DEST/montreal.sqlite"
+# Renamed from the upstream montreal.pmtiles/montreal.sqlite basenames: Android's
+# resource merger derives a raw-resource id by stripping the extension, so two
+# bundled assets sharing a basename ("montreal") collide as "assets_data_montreal"
+# and fail the release build with "Duplicate resources" — found by actually
+# running a production build, not by reasoning about it in the abstract.
+cp "$OUT/montreal.pmtiles" "$DEST/montreal-tiles.pmtiles"
+cp "$OUT/montreal.sqlite" "$DEST/montreal-db.sqlite"
 cp "$BASE/montreal-base.pmtiles" "$DEST/montreal-base.pmtiles"
 cp "$OUT/manifest.json" "$DEST/manifest.json"
 

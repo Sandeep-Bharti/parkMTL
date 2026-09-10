@@ -131,8 +131,8 @@ export async function loadArtifacts(): Promise<Artifacts> {
   if (shouldInstallBundle(manifest, existing)) {
     const names = artifactNames(manifest.ruleDictVersion);
     await Promise.all([
-      materialise(require('../assets/data/montreal.pmtiles'), names.tiles),
-      materialise(require('../assets/data/montreal.sqlite'), names.db),
+      materialise(require('../assets/data/montreal-tiles.pmtiles'), names.tiles),
+      materialise(require('../assets/data/montreal-db.sqlite'), names.db),
     ]);
     record = {
       ruleDictVersion: manifest.ruleDictVersion,
