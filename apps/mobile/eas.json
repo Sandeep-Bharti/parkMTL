@@ -33,6 +33,7 @@
       "ios": {
         "language": "en-CA",
         "appleTeamId": "2N795TKM4S",
+        "ascAppId": "6810497859",
         "ascApiKeyPath": "./secrets/AuthKey_P2DZHMJ5D6.p8",
         "ascApiKeyId": "P2DZHMJ5D6",
         "ascApiKeyIssuerId": "820a1045-5bd9-4244-a853-d4a3f692ef8f"
