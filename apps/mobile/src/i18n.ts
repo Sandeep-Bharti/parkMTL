@@ -75,6 +75,8 @@ const STRINGS = {
       'parkmtl needs location access to show what is near you. Enable it for parkmtl in Settings.',
     'location.openSettings': 'Open Settings',
     'location.cancel': 'Cancel',
+    'location.unavailableTitle': 'Could not get your location',
+    'location.unavailableBody': 'Make sure you have a clear view of the sky and try again.',
 
     'legend.available': 'You can park',
     'legend.restricted': 'You cannot',
@@ -198,6 +200,8 @@ const STRINGS = {
       'parkmtl a besoin d’accéder à votre position pour afficher ce qui est près de vous. Activez-la pour parkmtl dans Réglages.',
     'location.openSettings': 'Ouvrir Réglages',
     'location.cancel': 'Annuler',
+    'location.unavailableTitle': 'Position introuvable',
+    'location.unavailableBody': 'Assurez-vous d’avoir une vue dégagée sur le ciel et réessayez.',
 
     'legend.available': 'Vous pouvez stationner',
     'legend.restricted': 'Interdit',

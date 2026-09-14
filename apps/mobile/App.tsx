@@ -24,6 +24,7 @@ import {
   Map as MapView,
   UserLocation,
   type CameraRef,
+  type GeolocationPosition,
   type MapRef,
   type PressEvent,
 } from '@maplibre/maplibre-react-native';
@@ -254,18 +255,37 @@ function Parkmtl() {
   );
 
   const locate = useCallback(async () => {
-    // requestPermissions() resolves true on iOS whenever the native call
-    // doesn't throw, even if the user denied the prompt — so the real signal
-    // for "do we have location" is whether a position actually comes back.
-    await LocationManager.requestPermissions();
-    const position = await LocationManager.getCurrentPosition();
-    if (!position) {
+    const granted = await LocationManager.requestPermissions();
+    if (!granted) {
       Alert.alert(t('location.deniedTitle'), t('location.deniedBody'), [
         { text: t('location.cancel'), style: 'cancel' },
         { text: t('location.openSettings'), onPress: () => Linking.openSettings() },
       ]);
       return;
     }
+
+    // getCurrentPosition() only ever reads iOS's already-cached location, and
+    // nothing populates that cache until updates are actively running — so on
+    // a cold start it resolves undefined even with permission granted. Start
+    // listening and take the first real fix instead of reading an empty cache.
+    const position = await new Promise<GeolocationPosition | undefined>((resolve) => {
+      const timeout = setTimeout(() => {
+        LocationManager.removeListener(onUpdate);
+        resolve(undefined);
+      }, 10000);
+      function onUpdate(pos: GeolocationPosition) {
+        clearTimeout(timeout);
+        LocationManager.removeListener(onUpdate);
+        resolve(pos);
+      }
+      LocationManager.addListener(onUpdate);
+    });
+
+    if (!position) {
+      Alert.alert(t('location.unavailableTitle'), t('location.unavailableBody'));
+      return;
+    }
+
     setTracking(true);
     cameraRef.current?.flyTo({
       center: [position.coords.longitude, position.coords.latitude],
