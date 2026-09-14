@@ -70,6 +70,12 @@ const STRINGS = {
     'onboard.allow': 'Use my location',
     'onboard.notNow': 'Not now',
 
+    'location.deniedTitle': 'Location is off',
+    'location.deniedBody':
+      'parkmtl needs location access to show what is near you. Enable it for parkmtl in Settings.',
+    'location.openSettings': 'Open Settings',
+    'location.cancel': 'Cancel',
+
     'legend.available': 'You can park',
     'legend.restricted': 'You cannot',
     'search.placeholder': 'Street or borough',
@@ -186,6 +192,12 @@ const STRINGS = {
     'onboard.next': 'Suivant',
     'onboard.allow': 'Utiliser ma position',
     'onboard.notNow': 'Plus tard',
+
+    'location.deniedTitle': 'Position désactivée',
+    'location.deniedBody':
+      'parkmtl a besoin d’accéder à votre position pour afficher ce qui est près de vous. Activez-la pour parkmtl dans Réglages.',
+    'location.openSettings': 'Ouvrir Réglages',
+    'location.cancel': 'Annuler',
 
     'legend.available': 'Vous pouvez stationner',
     'legend.restricted': 'Interdit',

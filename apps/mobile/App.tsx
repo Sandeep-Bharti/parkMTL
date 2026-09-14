@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   AppState,
+  Linking,
   NativeSyntheticEvent,
   Pressable,
   StyleSheet,
@@ -252,18 +254,25 @@ function Parkmtl() {
   );
 
   const locate = useCallback(async () => {
-    const granted = await LocationManager.requestPermissions();
-    if (!granted) return;
-    setTracking(true);
+    // requestPermissions() resolves true on iOS whenever the native call
+    // doesn't throw, even if the user denied the prompt — so the real signal
+    // for "do we have location" is whether a position actually comes back.
+    await LocationManager.requestPermissions();
     const position = await LocationManager.getCurrentPosition();
-    if (position) {
-      cameraRef.current?.flyTo({
-        center: [position.coords.longitude, position.coords.latitude],
-        zoom: 17,
-        duration: 700,
-      });
+    if (!position) {
+      Alert.alert(t('location.deniedTitle'), t('location.deniedBody'), [
+        { text: t('location.cancel'), style: 'cancel' },
+        { text: t('location.openSettings'), onPress: () => Linking.openSettings() },
+      ]);
+      return;
     }
-  }, []);
+    setTracking(true);
+    cameraRef.current?.flyTo({
+      center: [position.coords.longitude, position.coords.latitude],
+      zoom: 17,
+      duration: 700,
+    });
+  }, [t]);
 
   const goTo = useCallback((place: Place) => {
     cameraRef.current?.flyTo({
