@@ -75,6 +75,9 @@ const START = { center: [-73.5673, 45.5019] as [number, number], zoom: 16 };
 const TAP_SLOP = 22;
 const CENTRE_SLOP = 34;
 
+/** The locate FAB's width, so the search bar can be sized to clear it. */
+const FAB_SIZE = 44;
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -94,6 +97,7 @@ function Parkmtl() {
   const [offsetHours, setOffsetHours] = useState(0);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [tracking, setTracking] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [scrubberOpen, setScrubberOpen] = useState(false);
@@ -255,44 +259,52 @@ function Parkmtl() {
   );
 
   const locate = useCallback(async () => {
-    const granted = await LocationManager.requestPermissions();
-    if (!granted) {
-      Alert.alert(t('location.deniedTitle'), t('location.deniedBody'), [
-        { text: t('location.cancel'), style: 'cancel' },
-        { text: t('location.openSettings'), onPress: () => Linking.openSettings() },
-      ]);
-      return;
-    }
-
-    // getCurrentPosition() only ever reads iOS's already-cached location, and
-    // nothing populates that cache until updates are actively running — so on
-    // a cold start it resolves undefined even with permission granted. Start
-    // listening and take the first real fix instead of reading an empty cache.
-    const position = await new Promise<GeolocationPosition | undefined>((resolve) => {
-      const timeout = setTimeout(() => {
-        LocationManager.removeListener(onUpdate);
-        resolve(undefined);
-      }, 10000);
-      function onUpdate(pos: GeolocationPosition) {
-        clearTimeout(timeout);
-        LocationManager.removeListener(onUpdate);
-        resolve(pos);
+    // A GPS fix can take up to 10s (below); without this guard, tapping the
+    // FAB again during that wait stacks another addListener + timer on top.
+    if (locating) return;
+    setLocating(true);
+    try {
+      const granted = await LocationManager.requestPermissions();
+      if (!granted) {
+        Alert.alert(t('location.deniedTitle'), t('location.deniedBody'), [
+          { text: t('location.cancel'), style: 'cancel' },
+          { text: t('location.openSettings'), onPress: () => Linking.openSettings() },
+        ]);
+        return;
       }
-      LocationManager.addListener(onUpdate);
-    });
 
-    if (!position) {
-      Alert.alert(t('location.unavailableTitle'), t('location.unavailableBody'));
-      return;
+      // getCurrentPosition() only ever reads iOS's already-cached location, and
+      // nothing populates that cache until updates are actively running — so on
+      // a cold start it resolves undefined even with permission granted. Start
+      // listening and take the first real fix instead of reading an empty cache.
+      const position = await new Promise<GeolocationPosition | undefined>((resolve) => {
+        const timeout = setTimeout(() => {
+          LocationManager.removeListener(onUpdate);
+          resolve(undefined);
+        }, 10000);
+        function onUpdate(pos: GeolocationPosition) {
+          clearTimeout(timeout);
+          LocationManager.removeListener(onUpdate);
+          resolve(pos);
+        }
+        LocationManager.addListener(onUpdate);
+      });
+
+      if (!position) {
+        Alert.alert(t('location.unavailableTitle'), t('location.unavailableBody'));
+        return;
+      }
+
+      setTracking(true);
+      cameraRef.current?.flyTo({
+        center: [position.coords.longitude, position.coords.latitude],
+        zoom: 17,
+        duration: 700,
+      });
+    } finally {
+      setLocating(false);
     }
-
-    setTracking(true);
-    cameraRef.current?.flyTo({
-      center: [position.coords.longitude, position.coords.latitude],
-      zoom: 17,
-      duration: 700,
-    });
-  }, [t]);
+  }, [locating, t]);
 
   const goTo = useCallback((place: Place) => {
     cameraRef.current?.flyTo({
@@ -376,9 +388,16 @@ function Parkmtl() {
 
   const finishOnboarding = useCallback(
     async (allowLocation: boolean) => {
-      setOnboarding(false);
-      await setOnboarded();
-      if (allowLocation) void locate();
+      // Await locate() before dismissing the card, so the OS permission
+      // dialog (and the FAB's own loading state) appears while the card is
+      // still on screen — dismissing first left a brief bare-map flash. The
+      // finally guarantees onboarding still closes if locate() ever throws.
+      try {
+        if (allowLocation) await locate();
+      } finally {
+        setOnboarding(false);
+        await setOnboarded();
+      }
     },
     [locate],
   );
@@ -453,6 +472,22 @@ function Parkmtl() {
             'circle-stroke-color': s.accent,
           }}
         />
+        {/* Same ring, for a selected bay — poles previously had the only
+            highlight, leaving a tapped space with no on-map anchor at all. */}
+        <Layer
+          id="bay-selected"
+          type="circle"
+          source={DATA_SOURCE}
+          source-layer="bays"
+          minzoom={DATA_MIN_ZOOM}
+          filter={['==', ['get', 'space'], selection?.space?.id ?? '']}
+          paint={{
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 10, 18, 18],
+            'circle-color': 'transparent',
+            'circle-stroke-width': 2.5,
+            'circle-stroke-color': s.accent,
+          }}
+        />
 
         {tracking && <UserLocation />}
       </MapView>
@@ -470,6 +505,7 @@ function Parkmtl() {
         t={t}
         dark={dark}
         top={insets.top + space.sm}
+        rightInset={space.md + FAB_SIZE + space.md}
         onSelect={goTo}
         onOpenSettings={() => {
           setSelection(null);
@@ -484,9 +520,14 @@ function Parkmtl() {
           elevation.low,
         ]}
         onPress={locate}
-        accessibilityLabel="Show my location"
+        disabled={locating}
+        accessibilityLabel={t('location.show')}
       >
-        <Text style={[styles.locateIcon, { color: s.accent }]}>◎</Text>
+        {locating ? (
+          <ActivityIndicator color={s.accent} />
+        ) : (
+          <Text style={[styles.locateIcon, { color: s.accent }]}>◎</Text>
+        )}
       </Pressable>
 
       {!sheetOpen && (

@@ -42,6 +42,10 @@ interface Surface {
   /** Ring drawn around available parking so it lifts off the basemap. */
   halo: string;
   accent: string;
+  /** Signage that could not be fully parsed — "check it yourself," not an error. */
+  warningBg: string;
+  warningBorder: string;
+  warningText: string;
 }
 
 export const light: Surface = {
@@ -53,6 +57,9 @@ export const light: Surface = {
   hairline: '#e4e7ec',
   halo: '#ffffff',
   accent: '#2f6fd0',
+  warningBg: '#fdf0d5',
+  warningBorder: '#c98a04',
+  warningText: '#6b4e00',
 };
 
 export const dark: Surface = {
@@ -64,6 +71,9 @@ export const dark: Surface = {
   hairline: '#2b313b',
   halo: '#10141a',
   accent: '#5c9bff',
+  warningBg: 'rgba(201,138,4,0.16)',
+  warningBorder: '#e0a838',
+  warningText: '#f0c674',
 };
 
 export const surface = (isDark: boolean): Surface => (isDark ? dark : light);

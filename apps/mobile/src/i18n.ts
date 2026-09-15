@@ -36,6 +36,7 @@ const STRINGS = {
     'sub.untilThen': 'Until {when}, then {status}',
     'sub.tomorrow': '{time} tomorrow',
 
+    'sheet.close': 'Close',
     'sheet.onePanel': 'The sign on this pole',
     'sheet.panels': '{n} panels on this pole, top to bottom',
     'sheet.inForce': 'In force now',
@@ -52,12 +53,14 @@ const STRINGS = {
     'scrubber.now': 'Now',
     'answer.none': 'No parking data here',
     'answer.noneHint': 'Move the map over a street with signs',
+    'answer.verify': 'Check the sign',
     'scrubber.at': 'At {time}',
 
     'onboard.colours.title': 'What the colours mean',
     'onboard.colours.body':
       'Bright, larger dots are parking you can use right now. They are drawn to stand out so you can find them at a glance.',
     'onboard.colours.restricted': 'Dimmer and smaller — you cannot park',
+    'onboard.colours.unknown': 'Grey — the sign could not be read. Check it yourself.',
     'onboard.trust.title': 'The sign always wins',
     'onboard.trust.body':
       'This app reads the city\u2019s own signage data, but that data can differ from what is actually on the street. Check the sign before you leave your car.',
@@ -67,9 +70,13 @@ const STRINGS = {
     'onboard.location.body':
       'Your location is used on the device to centre the map. It is never stored and never leaves your phone.',
     'onboard.next': 'Next',
+    'onboard.back': 'Back',
     'onboard.allow': 'Use my location',
     'onboard.notNow': 'Not now',
+    'onboard.step': 'Step {current} of {total}',
+    'onboard.finding': 'Finding your location…',
 
+    'location.show': 'Show my location',
     'location.deniedTitle': 'Location is off',
     'location.deniedBody':
       'parkmtl needs location access to show what is near you. Enable it for parkmtl in Settings.',
@@ -84,6 +91,8 @@ const STRINGS = {
     'search.noResults': 'No match',
     'search.streets': 'Streets with paid parking',
     'search.boroughs': 'Boroughs',
+    'search.clear': 'Clear search',
+    'search.settings': 'Settings',
     'search.limitation':
       'Only streets with paid parking can be searched by name; everywhere else, search by borough.',
 
@@ -161,6 +170,7 @@ const STRINGS = {
     'sub.untilThen': "Jusqu'à {when}, ensuite {status}",
     'sub.tomorrow': '{time} demain',
 
+    'sheet.close': 'Fermer',
     'sheet.onePanel': 'Le panneau sur ce poteau',
     'sheet.panels': '{n} panneaux sur ce poteau, de haut en bas',
     'sheet.inForce': 'En vigueur maintenant',
@@ -177,12 +187,14 @@ const STRINGS = {
     'scrubber.now': 'Maintenant',
     'answer.none': 'Aucune donnée ici',
     'answer.noneHint': 'Déplacez la carte sur une rue avec des panneaux',
+    'answer.verify': 'Vérifiez le panneau',
     'scrubber.at': 'À {time}',
 
     'onboard.colours.title': 'Ce que les couleurs signifient',
     'onboard.colours.body':
       'Les points vifs et plus gros indiquent un stationnement utilisable maintenant. Ils ressortent pour être repérés d\u2019un coup d\u2019œil.',
     'onboard.colours.restricted': 'Plus pâles et plus petits — stationnement interdit',
+    'onboard.colours.unknown': 'Gris — panneau illisible. Vérifiez-le vous-même.',
     'onboard.trust.title': 'Le panneau fait foi',
     'onboard.trust.body':
       'Cette application lit les données de signalisation de la Ville, mais elles peuvent différer de la réalité sur la rue. Vérifiez le panneau avant de quitter votre véhicule.',
@@ -192,9 +204,13 @@ const STRINGS = {
     'onboard.location.body':
       'Votre position sert uniquement à centrer la carte, sur l\u2019appareil. Elle n\u2019est jamais enregistrée ni transmise.',
     'onboard.next': 'Suivant',
+    'onboard.back': 'Retour',
     'onboard.allow': 'Utiliser ma position',
     'onboard.notNow': 'Plus tard',
+    'onboard.step': 'Étape {current} sur {total}',
+    'onboard.finding': 'Recherche de votre position…',
 
+    'location.show': 'Afficher ma position',
     'location.deniedTitle': 'Position désactivée',
     'location.deniedBody':
       'parkmtl a besoin d’accéder à votre position pour afficher ce qui est près de vous. Activez-la pour parkmtl dans Réglages.',
@@ -209,6 +225,8 @@ const STRINGS = {
     'search.noResults': 'Aucun résultat',
     'search.streets': 'Rues avec stationnement payant',
     'search.boroughs': 'Arrondissements',
+    'search.clear': 'Effacer la recherche',
+    'search.settings': 'Réglages',
     'search.limitation':
       'Seules les rues avec stationnement payant peuvent être cherchées par nom; ailleurs, cherchez par arrondissement.',
 

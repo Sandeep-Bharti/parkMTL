@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Status } from '@parkmtl/rules-core';
 
@@ -23,11 +23,12 @@ const RESTRICTED: Status[] = ['permit_only', 'no_parking', 'no_standing'];
 interface Props {
   t: Translator;
   dark: boolean;
-  onDone: (allowLocation: boolean) => void;
+  onDone: (allowLocation: boolean) => void | Promise<void>;
 }
 
 export function Onboarding({ t, dark, onDone }: Props) {
   const [step, setStep] = useState(0);
+  const [finishing, setFinishing] = useState(false);
   const s = surface(dark);
 
   const dot = (status: Status) => {
@@ -67,6 +68,9 @@ export function Onboarding({ t, dark, onDone }: Props) {
               {t('onboard.colours.restricted')}
             </Text>
             <View style={styles.group}>{RESTRICTED.map(dot)}</View>
+            <Text style={[type.micro, { color: s.textFaint, marginTop: space.sm }]}>
+              {t('onboard.colours.unknown')}
+            </Text>
             <View style={styles.group}>{dot('unknown')}</View>
           </>
         )}
@@ -93,28 +97,50 @@ export function Onboarding({ t, dark, onDone }: Props) {
         )}
 
         <View style={styles.footer}>
-          <View style={styles.pips}>
-            {[0, 1, 2].map((i) => (
-              <View
-                key={i}
-                style={[
-                  styles.pip,
-                  { backgroundColor: i === step ? s.accent : s.hairline },
-                ]}
-              />
-            ))}
+          <View style={styles.leftFooter}>
+            {step > 0 && !finishing && (
+              <Pressable onPress={() => setStep(step - 1)} style={styles.tapTarget} hitSlop={8}>
+                <Text style={[type.label, { color: s.textDim }]}>{t('onboard.back')}</Text>
+              </Pressable>
+            )}
+            <View
+              style={styles.pips}
+              accessible
+              accessibilityLabel={t('onboard.step', { current: step + 1, total: 3 })}
+            >
+              {[0, 1, 2].map((i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.pip,
+                    { backgroundColor: i === step ? s.accent : s.hairline },
+                  ]}
+                />
+              ))}
+            </View>
           </View>
 
           {step < 2 ? (
             <Pressable onPress={() => setStep(step + 1)} style={[styles.button, { backgroundColor: s.accent }]}>
               <Text style={styles.buttonText}>{t('onboard.next')}</Text>
             </Pressable>
+          ) : finishing ? (
+            <View style={styles.finishingRow}>
+              <ActivityIndicator color={s.accent} />
+              <Text style={[type.label, { color: s.textDim }]}>{t('onboard.finding')}</Text>
+            </View>
           ) : (
             <View style={styles.finalButtons}>
-              <Pressable onPress={() => onDone(false)} hitSlop={8}>
+              <Pressable onPress={() => onDone(false)} style={styles.tapTarget} hitSlop={8}>
                 <Text style={[type.label, { color: s.textFaint }]}>{t('onboard.notNow')}</Text>
               </Pressable>
-              <Pressable onPress={() => onDone(true)} style={[styles.button, { backgroundColor: s.accent }]}>
+              <Pressable
+                onPress={async () => {
+                  setFinishing(true);
+                  await onDone(true);
+                }}
+                style={[styles.button, { backgroundColor: s.accent }]}
+              >
                 <Text style={styles.buttonText}>{t('onboard.allow')}</Text>
               </Pressable>
             </View>
@@ -153,6 +179,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: space.xl,
   },
+  leftFooter: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   pips: { flexDirection: 'row', gap: 6 },
   pip: { width: 7, height: 7, borderRadius: 4 },
   button: {
@@ -162,4 +189,7 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   finalButtons: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  /** A driver-context tap target: 44pt, same standard as the map's locate FAB. */
+  tapTarget: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' },
+  finishingRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
 });

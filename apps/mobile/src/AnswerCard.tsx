@@ -80,6 +80,16 @@ export function AnswerCard({
                   {answer.where}
                 </Text>
               )}
+              {answer.assessment.needsVerification && (
+                <View
+                  style={[
+                    styles.verifyBadge,
+                    { backgroundColor: s.warningBg, borderColor: s.warningBorder },
+                  ]}
+                >
+                  <Text style={[type.micro, { color: s.warningText }]}>{t('answer.verify')}</Text>
+                </View>
+              )}
             </>
           ) : (
             <>
@@ -124,6 +134,14 @@ const styles = StyleSheet.create({
   answerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   bar: { width: 5, alignSelf: 'stretch', minHeight: 46, borderRadius: 3 },
   answerText: { flex: 1, gap: 1 },
+  verifyBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 3,
+    paddingHorizontal: space.xs + 2,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+  },
   chevron: { fontSize: 26, fontWeight: '300', marginLeft: space.xs },
   timeRow: {
     flexDirection: 'row',
