@@ -10,6 +10,7 @@
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { Language, Translator } from './i18n.ts';
+import { elevation, radius, space, surface, type } from './theme.ts';
 
 const SOURCES = [
   {
@@ -58,6 +59,8 @@ export function SettingsSheet({
   dark,
   onClose,
 }: Props) {
+  const s = surface(dark);
+
   const updateLabel =
     updateState === 'checking'
       ? t('settings.checking')
@@ -71,32 +74,39 @@ export function SettingsSheet({
               ? t('settings.updateFailed')
               : t('settings.checkUpdates');
 
+  // Once a check has resolved, the button's label becomes a status readout —
+  // it stays tappable (to check again), but shouldn't keep looking like a
+  // fresh call-to-action once it's reporting something.
+  const updateIsStatus = updateState !== 'idle' && updateState !== 'checking';
+
   return (
-    <View style={[styles.sheet, dark && styles.sheetDark]}>
+    <View style={[styles.sheet, { backgroundColor: s.card }, elevation.high]}>
       <View style={styles.header}>
-        <Text style={[styles.title, dark && styles.textDark]}>{t('settings.title')}</Text>
+        <Text style={[type.title, { color: s.text }]}>{t('settings.title')}</Text>
         <Pressable onPress={onClose} hitSlop={12} accessibilityLabel={t('settings.close')}>
-          <Text style={styles.close}>✕</Text>
+          <Text style={[styles.close, { color: s.textFaint }]}>✕</Text>
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
         {/* First, because it is the one thing here that is a request rather
             than a control — and it is easy to miss further down. */}
-        <Pressable onPress={onOpenSupport} style={styles.supportRow} accessibilityRole="button">
+        <Pressable
+          onPress={onOpenSupport}
+          style={[styles.supportRow, { backgroundColor: s.hairline }]}
+          accessibilityRole="button"
+        >
           <Text style={styles.supportIcon}>☕</Text>
           <View style={styles.supportText}>
-            <Text style={[styles.supportTitle, dark && styles.textDark]}>
-              {t('support.open')}
-            </Text>
-            <Text style={[styles.supportHint, dark && styles.dimDark]}>
+            <Text style={[type.label, { color: s.text }]}>{t('support.open')}</Text>
+            <Text style={[type.caption, styles.supportHint, { color: s.textDim }]}>
               {t('support.openHint')}
             </Text>
           </View>
-          <Text style={styles.supportChevron}>›</Text>
+          <Text style={[styles.supportChevron, { color: s.textFaint }]}>›</Text>
         </Pressable>
 
-        <Text style={[styles.sectionLabel, dark && styles.dimDark]}>
+        <Text style={[type.label, styles.sectionLabel, { color: s.textFaint }]}>
           {t('settings.language')}
         </Text>
         <View style={styles.segments}>
@@ -108,16 +118,16 @@ export function SettingsSheet({
                 onPress={() => onLanguage(option)}
                 style={[
                   styles.segment,
-                  selected && styles.segmentOn,
-                  dark && styles.segmentDark,
-                  selected && dark && styles.segmentOnDark,
+                  { backgroundColor: selected ? s.accentStrong : s.hairline },
                 ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
               >
                 <Text
                   style={[
+                    type.label,
                     styles.segmentText,
-                    selected && styles.segmentTextOn,
-                    dark && !selected && styles.textDark,
+                    { color: selected ? '#ffffff' : s.text },
                   ]}
                 >
                   {option === null ? t('settings.system') : option === 'en' ? 'English' : 'Français'}
@@ -127,41 +137,60 @@ export function SettingsSheet({
           })}
         </View>
 
-        <Text style={[styles.sectionLabel, dark && styles.dimDark]}>{t('settings.data')}</Text>
-        <Text style={[styles.body_, dark && styles.textDark]}>
+        <Text style={[type.label, styles.sectionLabel, { color: s.textFaint }]}>
+          {t('settings.data')}
+        </Text>
+        <Text style={[type.body, { color: s.text }]}>
           {t('settings.dataVintage', { date: exportDate })} · {ruleCount}
         </Text>
         <Pressable
           onPress={onCheckUpdates}
           disabled={updateState === 'checking'}
-          style={[styles.button, dark && styles.buttonDark]}
+          style={[
+            styles.button,
+            updateIsStatus
+              ? { backgroundColor: s.hairline }
+              : { backgroundColor: s.accentStrong },
+          ]}
         >
-          <Text style={styles.buttonText}>{updateLabel}</Text>
+          <Text
+            style={[
+              type.label,
+              styles.buttonText,
+              { color: updateIsStatus ? s.textDim : '#ffffff' },
+            ]}
+          >
+            {updateLabel}
+          </Text>
         </Pressable>
 
-        <Text style={[styles.sectionLabel, dark && styles.dimDark]}>
+        <Text style={[type.label, styles.sectionLabel, { color: s.textFaint }]}>
           {t('settings.sources')}
         </Text>
         {SOURCES.map((source) => (
           <Pressable key={source.url} onPress={() => Linking.openURL(source.url)}>
-            <Text style={styles.link}>{source.label}</Text>
+            <Text style={[type.label, styles.link, { color: s.accent }]}>{source.label}</Text>
           </Pressable>
         ))}
-        <Text style={[styles.licence, dark && styles.dimDark]}>
-          Données : Agence de mobilité durable de Montréal; Ville de Montréal (CC BY 4.0)
+        <Text style={[type.caption, styles.licence, { color: s.textDim }]}>
+          {t('onboard.trust.sources')}
         </Text>
 
         <View style={styles.legalRow}>
           <Pressable onPress={() => Linking.openURL('https://sandeep-bharti.github.io/parkMTL/privacy.html')}>
-            <Text style={styles.link}>{t('settings.privacy')}</Text>
+            <Text style={[type.label, styles.link, { color: s.accent }]}>
+              {t('settings.privacy')}
+            </Text>
           </Pressable>
-          <Text style={[styles.legalDot, dark && styles.dimDark]}>·</Text>
+          <Text style={[type.caption, { color: s.textFaint }]}>·</Text>
           <Pressable onPress={() => Linking.openURL('https://sandeep-bharti.github.io/parkMTL/terms.html')}>
-            <Text style={styles.link}>{t('settings.terms')}</Text>
+            <Text style={[type.label, styles.link, { color: s.accent }]}>
+              {t('settings.terms')}
+            </Text>
           </Pressable>
         </View>
 
-        <Text style={[styles.disclaimer, dark && styles.dimDark]}>
+        <Text style={[type.caption, styles.disclaimer, { color: s.textDim }]}>
           {t('disclaimer.long')}
         </Text>
       </ScrollView>
@@ -176,83 +205,65 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     maxHeight: '72%',
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingTop: 14,
-    paddingBottom: 30,
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 12,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingTop: space.md + 2,
+    paddingBottom: space.xl + space.sm,
   },
-  sheetDark: { backgroundColor: '#161a21' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
+    paddingHorizontal: space.lg + 2,
   },
-  title: { fontSize: 18, fontWeight: '700' },
-  close: { fontSize: 17, color: '#8a8f98', paddingHorizontal: 4 },
-  body: { paddingHorizontal: 18, paddingTop: 10 },
+  close: { fontSize: 17, paddingHorizontal: space.xs },
+  body: { paddingHorizontal: space.lg + 2, paddingTop: space.sm + 2 },
   supportRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(47,111,208,0.10)',
+    gap: space.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   supportIcon: { fontSize: 22 },
   supportText: { flex: 1 },
-  supportTitle: { fontSize: 15, fontWeight: '600' },
-  supportHint: { fontSize: 11, color: '#5b626e', marginTop: 1 },
-  supportChevron: { fontSize: 22, color: '#8a8f98', fontWeight: '300' },
-  body_: { fontSize: 14 },
-  textDark: { color: '#e8eaed' },
-  dimDark: { color: '#a2a9b4' },
+  supportHint: { marginTop: 1 },
+  supportChevron: { fontSize: 22, fontWeight: '300' },
   sectionLabel: {
-    fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
-    color: '#8a8f98',
-    marginTop: 16,
-    marginBottom: 7,
+    marginTop: space.lg,
+    marginBottom: space.sm - 1,
   },
-  segments: { flexDirection: 'row', gap: 8 },
+  segments: { flexDirection: 'row', gap: space.sm },
   segment: {
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    backgroundColor: '#eef1f5',
+    minHeight: 44,
+    minWidth: 44,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.lg - 2,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  segmentDark: { backgroundColor: '#232932' },
-  segmentOn: { backgroundColor: '#2f6fd0' },
-  segmentOnDark: { backgroundColor: '#2f6fd0' },
-  segmentText: { fontSize: 13, fontWeight: '600', color: '#3c4250' },
-  segmentTextOn: { color: '#ffffff' },
+  segmentText: {},
   button: {
-    marginTop: 10,
+    marginTop: space.sm + 2,
     alignSelf: 'flex-start',
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: '#2f6fd0',
+    minHeight: 44,
+    paddingVertical: space.sm + 1,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.sm,
+    justifyContent: 'center',
   },
-  buttonDark: { backgroundColor: '#2f6fd0' },
-  buttonText: { color: '#ffffff', fontSize: 13, fontWeight: '600' },
-  link: { fontSize: 13, color: '#2f6fd0', paddingVertical: 4, lineHeight: 18 },
-  licence: { fontSize: 11, color: '#5b626e', marginTop: 10, lineHeight: 16 },
-  legalRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
-  legalDot: { fontSize: 11, color: '#8a8f98' },
+  buttonText: {},
+  link: { paddingVertical: space.xs, lineHeight: 18 },
+  licence: { marginTop: space.sm + 2, lineHeight: 16 },
+  legalRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm - 2, marginTop: space.md },
   disclaimer: {
-    fontSize: 12,
-    color: '#5b626e',
-    marginTop: 18,
-    marginBottom: 8,
+    marginTop: space.lg + 2,
+    marginBottom: space.sm,
     lineHeight: 17,
     fontStyle: 'italic',
   },

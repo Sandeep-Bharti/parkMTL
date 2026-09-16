@@ -114,6 +114,8 @@ const STRINGS = {
     'support.restoreHint': 'Already supported? Restore here',
     'support.restoreDone': 'Restore complete',
     'support.restoreDoneBody': 'Any previous purchases have been restored.',
+    'support.restoreEmpty': 'Nothing to restore',
+    'support.restoreEmptyBody': 'No previous purchases were found for this account.',
     'support.restoreFailed': 'Restore failed',
     'support.thanks': 'Thank you! 🙏',
     'support.thanksBody':
@@ -121,6 +123,9 @@ const STRINGS = {
     'support.failed': 'Purchase failed',
     'support.failedBody': 'Please try again later.',
     'support.unavailable': 'The store is not available right now.',
+    'support.alreadyOwned': "You're already supporting parkmtl",
+    'support.alreadyOwnedBody': 'Thank you — your monthly support is already active. 🙏',
+    'support.activeSupporter': "You're already a monthly supporter — thank you! 🙏",
     'support.dataNote':
       'Parking data comes from the City of Montréal and the Agence de mobilité durable, free of charge under CC BY 4.0. Contributions support development only.',
     'settings.title': 'About & settings',
@@ -142,6 +147,9 @@ const STRINGS = {
     'disclaimer.short': 'Guidance only — the signs on the street are authoritative.',
     'disclaimer.long':
       'Both publishers state the data may diverge from conditions in the field. This app is guidance, not a guarantee. The signs on the street are authoritative.',
+
+    'error.loadTitle': 'Could not load parking data',
+    'error.retry': 'Try again',
   },
 
   fr: {
@@ -248,6 +256,8 @@ const STRINGS = {
     'support.restoreHint': 'Déjà contribué? Restaurez ici',
     'support.restoreDone': 'Restauration terminée',
     'support.restoreDoneBody': 'Vos achats précédents ont été restaurés.',
+    'support.restoreEmpty': 'Rien à restaurer',
+    'support.restoreEmptyBody': 'Aucun achat précédent trouvé pour ce compte.',
     'support.restoreFailed': 'Échec de la restauration',
     'support.thanks': 'Merci! 🙏',
     'support.thanksBody':
@@ -255,6 +265,9 @@ const STRINGS = {
     'support.failed': "Échec de l'achat",
     'support.failedBody': 'Veuillez réessayer plus tard.',
     'support.unavailable': "La boutique n'est pas disponible pour le moment.",
+    'support.alreadyOwned': 'Vous soutenez déjà parkmtl',
+    'support.alreadyOwnedBody': 'Merci — votre soutien mensuel est déjà actif. 🙏',
+    'support.activeSupporter': 'Vous êtes déjà soutien mensuel — merci! 🙏',
     'support.dataNote':
       "Les données de stationnement proviennent de la Ville de Montréal et de l'Agence de mobilité durable, gratuitement sous licence CC BY 4.0. Les contributions financent uniquement le développement.",
     'settings.title': 'À propos et réglages',
@@ -277,6 +290,9 @@ const STRINGS = {
       'Indicatif seulement — les panneaux sur la rue font foi.',
     'disclaimer.long':
       "Les deux fournisseurs précisent que les données peuvent différer de la réalité sur le terrain. Cette application est indicative et ne constitue pas une garantie. Les panneaux sur la rue font foi.",
+
+    'error.loadTitle': 'Impossible de charger les données de stationnement',
+    'error.retry': 'Réessayer',
   },
 } as const;
 

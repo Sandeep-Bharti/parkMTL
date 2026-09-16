@@ -41,7 +41,15 @@ interface Surface {
   hairline: string;
   /** Ring drawn around available parking so it lifts off the basemap. */
   halo: string;
+  /** For text and icons on a card — not calibrated for a solid fill. */
   accent: string;
+  /**
+   * For white text on a solid fill (buttons, the support tiles). `accent`
+   * lightens in dark mode for legibility on a card, which fails contrast as
+   * a fill behind white text — this stays dark enough in both modes to hold
+   * white text at ≥4.5:1 (verified, not eyeballed).
+   */
+  accentStrong: string;
   /** Signage that could not be fully parsed — "check it yourself," not an error. */
   warningBg: string;
   warningBorder: string;
@@ -57,6 +65,7 @@ export const light: Surface = {
   hairline: '#e4e7ec',
   halo: '#ffffff',
   accent: '#2f6fd0',
+  accentStrong: '#2f6fd0',
   warningBg: '#fdf0d5',
   warningBorder: '#c98a04',
   warningText: '#6b4e00',
@@ -71,6 +80,7 @@ export const dark: Surface = {
   hairline: '#2b313b',
   halo: '#10141a',
   accent: '#5c9bff',
+  accentStrong: '#1d4ed8',
   warningBg: 'rgba(201,138,4,0.16)',
   warningBorder: '#e0a838',
   warningText: '#f0c674',

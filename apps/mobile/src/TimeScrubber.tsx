@@ -22,6 +22,7 @@ import {
 
 import { formatWhen } from './format.ts';
 import type { Language, Translator } from './i18n.ts';
+import { surface, type } from './theme.ts';
 
 /** How far either side of now the scrubber reaches. */
 export const RANGE_HOURS = 24;
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export function TimeScrubber({ offsetHours, onChange, now, t, lang, dark }: Props) {
+  const s = surface(dark);
   const [width, setWidth] = useState(0);
   const widthRef = useRef(0);
 
@@ -79,23 +81,30 @@ export function TimeScrubber({ offsetHours, onChange, now, t, lang, dark }: Prop
   const isNow = Math.abs(offsetHours) < 0.001;
 
   return (
-    <View style={[styles.wrap, dark && styles.wrapDark]}>
-      <View style={styles.track} onLayout={onLayout} {...responder.panHandlers}>
-        <View style={[styles.trackLine, dark && styles.trackLineDark]} />
+    <View style={styles.wrap}>
+      <View
+        style={styles.track}
+        onLayout={onLayout}
+        {...responder.panHandlers}
+        accessibilityRole="adjustable"
+        accessibilityLabel={t('scrubber.now')}
+        accessibilityValue={{ min: -RANGE_HOURS, max: RANGE_HOURS, now: offsetHours }}
+      >
+        <View style={[styles.trackLine, { backgroundColor: s.hairline }]} />
         {/* The midpoint tick marks the present, so "how far from now" stays
             readable without doing arithmetic on the label. */}
-        <View style={[styles.midTick, { left: width / 2 - 1 }]} />
-        <View style={[styles.knob, { left: Math.max(0, fraction * width - 11) }]} />
+        <View style={[styles.midTick, { left: width / 2 - 1, backgroundColor: s.hairline }]} />
+        <View style={[styles.knob, { left: Math.max(0, fraction * width - 11), borderColor: s.accent }]} />
       </View>
 
       <View style={styles.scaleRow}>
-        <Text style={styles.scale}>−24h</Text>
+        <Text style={[type.micro, styles.scale, { color: s.textFaint }]}>−24h</Text>
         {!isNow && (
           <Pressable onPress={() => onChange(0)} hitSlop={12}>
-            <Text style={styles.reset}>{t('scrubber.now')}</Text>
+            <Text style={[type.label, styles.reset, { color: s.accent }]}>{t('scrubber.now')}</Text>
           </Pressable>
         )}
-        <Text style={styles.scale}>+24h</Text>
+        <Text style={[type.micro, styles.scale, { color: s.textFaint }]}>+24h</Text>
       </View>
     </View>
   );
@@ -104,19 +113,13 @@ export function TimeScrubber({ offsetHours, onChange, now, t, lang, dark }: Prop
 const styles = StyleSheet.create({
   // Lives inside AnswerCard now, so it lays out in flow rather than floating.
   wrap: { paddingTop: 2 },
-  wrapDark: {},
-  labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  label: { fontSize: 15, fontWeight: '600' },
-  textDark: { color: '#e8eaed' },
-  reset: { fontSize: 13, fontWeight: '600', color: '#2f6fd0' },
+  reset: {},
   track: { height: 34, justifyContent: 'center', marginTop: 2 },
-  trackLine: { height: 3, borderRadius: 2, backgroundColor: '#dfe3e9' },
-  trackLineDark: { backgroundColor: '#2b313b' },
+  trackLine: { height: 3, borderRadius: 2 },
   midTick: {
     position: 'absolute',
     width: 2,
     height: 12,
-    backgroundColor: '#b6bcc6',
     borderRadius: 1,
   },
   knob: {
@@ -126,7 +129,6 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     backgroundColor: '#ffffff',
     borderWidth: 2,
-    borderColor: '#2f6fd0',
     shadowColor: '#000',
     shadowOpacity: 0.2,
     shadowRadius: 3,
@@ -134,5 +136,5 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   scaleRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
-  scale: { fontSize: 10, color: '#8a8f98' },
+  scale: {},
 });

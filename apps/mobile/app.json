@@ -108,7 +108,20 @@
           }
         }
       ],
-      "./plugins/withStoreKitConfig"
+      "./plugins/withStoreKitConfig",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#E6F4FE",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#10141a"
+          }
+        }
+      ]
     ],
     "assetBundlePatterns": [
       "**/*"

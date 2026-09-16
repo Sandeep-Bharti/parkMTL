@@ -7,7 +7,7 @@
  * suspect the free version is the degraded one.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -38,9 +38,17 @@ interface Props {
   onClose: () => void;
 }
 
+/** Shares the one busyId flag with buy(), so a purchase and a restore
+ * correctly disable each other instead of racing on two independent flags. */
+const RESTORE_ID = '__restore__';
+
 export function SupportSheet({ t, dark, onClose }: Props) {
   const s = surface(dark);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Set true only while our own restore() call is in flight, so the effect
+  // below reacts to the resulting state change but not to unrelated ones
+  // (e.g. a fresh purchase updating the same arrays).
+  const restoring = useRef(false);
 
   const monthlyProducts = monthlyProductsFor(Platform.OS);
   const monthlyIds = monthlyProducts.map((p) => p.id);
@@ -49,7 +57,10 @@ export function SupportSheet({ t, dark, onClose }: Props) {
     connected,
     products,
     subscriptions,
+    activeSubscriptions,
+    availablePurchases,
     fetchProducts,
+    getActiveSubscriptions,
     requestPurchase,
     finishTransaction,
     restorePurchases,
@@ -74,6 +85,10 @@ export function SupportSheet({ t, dark, onClose }: Props) {
       setBusyId(null);
       // Cancelling is a decision, not a failure. Saying nothing is correct.
       if (error.code === ErrorCode.UserCancelled) return;
+      if (error.code === ErrorCode.AlreadyOwned) {
+        Alert.alert(t('support.alreadyOwned'), t('support.alreadyOwnedBody'));
+        return;
+      }
       Alert.alert(t('support.failed'), error.message ?? t('support.failedBody'));
     },
   });
@@ -85,7 +100,29 @@ export function SupportSheet({ t, dark, onClose }: Props) {
     // asked for on a page they opened to be generous.
     fetchProducts({ skus: ONE_TIME_IDS, type: 'in-app' }).catch(() => {});
     fetchProducts({ skus: monthlyIds, type: 'subs' }).catch(() => {});
+    // So a returning supporter sees the "already supporting" state on open,
+    // not only right after a fresh purchase or an explicit restore.
+    getActiveSubscriptions(monthlyIds).catch(() => {});
   }, [connected]);
+
+  // Once restore() resolves, restorePurchasesInternal has already updated
+  // availablePurchases — react to that instead of trusting our own stale
+  // closure over it from before the await.
+  useEffect(() => {
+    if (!restoring.current) return;
+    restoring.current = false;
+    setBusyId(null);
+    const found = availablePurchases.length > 0 || activeSubscriptions.length > 0;
+    Alert.alert(
+      found ? t('support.restoreDone') : t('support.restoreEmpty'),
+      found ? t('support.restoreDoneBody') : t('support.restoreEmptyBody'),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availablePurchases, activeSubscriptions]);
+
+  const isSubscribed = activeSubscriptions.some(
+    (sub) => sub.isActive && monthlyIds.includes(sub.productId),
+  );
 
   const store: StoreProduct[] = [
     ...((products ?? []) as StoreProduct[]),
@@ -117,9 +154,14 @@ export function SupportSheet({ t, dark, onClose }: Props) {
         } as never);
       } catch (e) {
         const error = e as { code?: string; message?: string };
-        if (error.code !== ErrorCode.UserCancelled) {
-          Alert.alert(t('support.failed'), error.message ?? t('support.failedBody'));
+        if (error.code === ErrorCode.UserCancelled) {
+          return;
         }
+        if (error.code === ErrorCode.AlreadyOwned) {
+          Alert.alert(t('support.alreadyOwned'), t('support.alreadyOwnedBody'));
+          return;
+        }
+        Alert.alert(t('support.failed'), error.message ?? t('support.failedBody'));
       } finally {
         // Ekadashi's version only cleared this in the callbacks, so a purchase
         // that resolved without firing one left the button spinning for good.
@@ -130,19 +172,30 @@ export function SupportSheet({ t, dark, onClose }: Props) {
   );
 
   const restore = useCallback(async () => {
+    if (busyId !== null) return;
+    setBusyId(RESTORE_ID);
     try {
+      restoring.current = true;
       await restorePurchases();
-      Alert.alert(t('support.restoreDone'), t('support.restoreDoneBody'));
+      // Success is reported by the effect above, once availablePurchases/
+      // activeSubscriptions actually reflect what restorePurchases found.
     } catch {
+      restoring.current = false;
+      setBusyId(null);
       Alert.alert(t('support.restoreFailed'), t('support.failedBody'));
     }
-  }, [restorePurchases, t]);
+  }, [busyId, restorePurchases, t]);
 
   return (
     <View style={[styles.sheet, { backgroundColor: s.card }, elevation.high]}>
       <View style={styles.header}>
         <Text style={[type.title, { color: s.text }]}>{t('support.title')}</Text>
-        <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button">
+        <Pressable
+          onPress={onClose}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={t('sheet.close')}
+        >
           <Text style={[styles.close, { color: s.textFaint }]}>✕</Text>
         </Pressable>
       </View>
@@ -168,7 +221,7 @@ export function SupportSheet({ t, dark, onClose }: Props) {
               key={product.id}
               onPress={() => buy(product.id, 'in-app')}
               disabled={busyId !== null}
-              style={[styles.tier, { backgroundColor: s.accent }]}
+              style={[styles.tier, { backgroundColor: s.accentStrong }]}
               accessibilityRole="button"
               accessibilityLabel={`${t(product.labelKey)} ${priceFor(product.id, store)}`}
             >
@@ -176,8 +229,10 @@ export function SupportSheet({ t, dark, onClose }: Props) {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <>
-                  <Text style={styles.tierPrice}>{priceFor(product.id, store)}</Text>
-                  <Text style={styles.tierLabel}>{t(product.labelKey)}</Text>
+                  <Text style={[type.title, styles.tierPrice]}>
+                    {priceFor(product.id, store)}
+                  </Text>
+                  <Text style={[type.caption, styles.tierLabel]}>{t(product.labelKey)}</Text>
                 </>
               )}
             </Pressable>
@@ -188,36 +243,53 @@ export function SupportSheet({ t, dark, onClose }: Props) {
           <Pressable
             key={product.id}
             onPress={() => buy(product.id, 'subs')}
-            disabled={busyId !== null}
+            disabled={busyId !== null || isSubscribed}
             style={[styles.monthly, { borderColor: s.hairline }]}
             accessibilityRole="button"
-            accessibilityLabel={`${t('support.monthlyTitle')} ${t('support.perMonth', {
-              price: priceFor(product.id, store),
-            })}`}
+            accessibilityLabel={
+              isSubscribed
+                ? t('support.activeSupporter')
+                : `${t('support.monthlyTitle')} ${t('support.perMonth', {
+                    price: priceFor(product.id, store),
+                  })}`
+            }
           >
             <View style={styles.monthlyText}>
               <Text style={[type.label, { color: s.text }]}>
                 {t('support.monthlyTitle')}
               </Text>
               <Text style={[type.caption, { color: s.textFaint }]}>
-                {t('support.monthlyCaption')}
+                {isSubscribed ? t('support.activeSupporter') : t('support.monthlyCaption')}
               </Text>
             </View>
-            {busyId === product.id ? (
+            {isSubscribed ? (
+              <Text style={[type.title, styles.monthlyPrice, { color: s.accent }]}>✓</Text>
+            ) : busyId === product.id ? (
               <ActivityIndicator color={s.accent} />
             ) : (
-              <Text style={[styles.monthlyPrice, { color: s.accent }]}>
+              <Text style={[type.title, styles.monthlyPrice, { color: s.accent }]}>
                 {t('support.perMonth', { price: priceFor(product.id, store) })}
               </Text>
             )}
           </Pressable>
         ))}
 
-        <Pressable onPress={restore} style={styles.restore} accessibilityRole="button">
-          <Text style={[type.label, { color: s.accent }]}>{t('support.restore')}</Text>
-          <Text style={[type.caption, { color: s.textFaint }]}>
-            {t('support.restoreHint')}
-          </Text>
+        <Pressable
+          onPress={restore}
+          disabled={busyId !== null}
+          style={styles.restore}
+          accessibilityRole="button"
+        >
+          {busyId === RESTORE_ID ? (
+            <ActivityIndicator color={s.accent} />
+          ) : (
+            <>
+              <Text style={[type.label, { color: s.accent }]}>{t('support.restore')}</Text>
+              <Text style={[type.caption, { color: s.textFaint }]}>
+                {t('support.restoreHint')}
+              </Text>
+            </>
+          )}
         </Pressable>
 
         {/* The data is public and free; contributions must not look like a fee
@@ -273,8 +345,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: space.sm,
   },
-  tierPrice: { color: '#fff', fontSize: 17, fontWeight: '700' },
-  tierLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 11, marginTop: 1 },
+  tierPrice: { color: '#fff' },
+  tierLabel: { color: 'rgba(255,255,255,0.85)', marginTop: 1 },
   monthly: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -285,7 +357,7 @@ const styles = StyleSheet.create({
     marginTop: space.lg,
   },
   monthlyText: { flex: 1, gap: 1 },
-  monthlyPrice: { fontSize: 16, fontWeight: '700' },
+  monthlyPrice: {},
   restore: { marginTop: space.xl, gap: 1 },
   note: { marginTop: space.xl, lineHeight: 15 },
 });

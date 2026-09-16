@@ -15,6 +15,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { StatusBar } from 'expo-status-bar';
 import { getLocales } from 'expo-localization';
 import * as Haptics from 'expo-haptics';
+import * as SplashScreen from 'expo-splash-screen';
 import {
   Camera,
   Layer,
@@ -78,6 +79,10 @@ const CENTRE_SLOP = 34;
 /** The locate FAB's width, so the search bar can be sized to clear it. */
 const FAB_SIZE = 44;
 
+// Held until the first boot attempt settles, success or failure — first run
+// (or right after an update) can spend real time materialising map data.
+void SplashScreen.preventAutoHideAsync();
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -115,21 +120,38 @@ function Parkmtl() {
   );
   const t = useMemo(() => translatorFor(lang), [lang]);
 
-  useEffect(() => {
-    let cancelled = false;
+  // A counter rather than a plain boolean flag: a Retry tap starts a new
+  // attempt without needing to cancel the previous effect, and a stale
+  // attempt's result is simply ignored if a newer one has already started.
+  const bootAttempt = useRef(0);
+
+  const boot = useCallback(() => {
+    const attempt = ++bootAttempt.current;
+    setError(null);
     loadArtifacts()
       .then(async (a) => {
-        if (cancelled) return;
+        if (attempt !== bootAttempt.current) return;
         setArtifacts(a);
         setPlaces(await loadPlaces(a.db));
         setOnboarding(!(await hasOnboarded()));
+        void SplashScreen.hideAsync();
       })
-      .catch((e) => !cancelled && setError(String(e?.message ?? e)));
+      .catch((e) => {
+        if (attempt !== bootAttempt.current) return;
+        setError(String(e?.message ?? e));
+        // Must hide here too — a cold-start failure would otherwise leave
+        // the splash on screen forever, with no way for Retry to ever show.
+        void SplashScreen.hideAsync();
+      });
+  }, []);
+
+  useEffect(() => {
+    boot();
     void registerRefresh();
     return () => {
-      cancelled = true;
+      bootAttempt.current++;
     };
-  }, []);
+  }, [boot]);
 
   const now = useMemo(() => new Date(), [artifacts]);
   const at = useMemo(
@@ -404,16 +426,22 @@ function Parkmtl() {
 
   if (error) {
     return (
-      <View style={[styles.centre, { backgroundColor: dark ? '#11151c' : '#fff' }]}>
-        <Text style={[type.title, { color: s.text }]}>Could not load parking data</Text>
+      <View style={[styles.centre, { backgroundColor: s.card }]}>
+        <Text style={[type.title, { color: s.text }]}>{t('error.loadTitle')}</Text>
         <Text style={[type.caption, styles.errorDetail, { color: s.textDim }]}>{error}</Text>
+        <Pressable
+          onPress={boot}
+          style={[styles.retryButton, { backgroundColor: s.accentStrong }]}
+        >
+          <Text style={[type.label, styles.retryButtonText]}>{t('error.retry')}</Text>
+        </Pressable>
       </View>
     );
   }
 
   if (!style || !paint || !artifacts) {
     return (
-      <View style={[styles.centre, { backgroundColor: dark ? '#11151c' : '#fff' }]}>
+      <View style={[styles.centre, { backgroundColor: s.card }]}>
         <ActivityIndicator color={s.accent} />
       </View>
     );
@@ -615,6 +643,13 @@ const styles = StyleSheet.create({
   map: { flex: 1 },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.sm },
   errorDetail: { textAlign: 'center', paddingHorizontal: space.xl },
+  retryButton: {
+    marginTop: space.sm,
+    paddingVertical: space.sm + 1,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.sm,
+  },
+  retryButtonText: { color: '#ffffff' },
   reticleWrap: {
     position: 'absolute',
     top: 0,

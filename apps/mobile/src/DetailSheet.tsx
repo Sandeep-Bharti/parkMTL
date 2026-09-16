@@ -7,7 +7,17 @@
  * read is called out rather than quietly folded into a confident answer.
  */
 
-import { ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
+import { useMemo, useRef } from 'react';
+import {
+  Animated,
+  type LayoutChangeEvent,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { assess, type Rule, type Status } from '@parkmtl/rules-core';
 import { TIME_ZONE, formatTariff } from '@parkmtl/city-montreal';
@@ -54,21 +64,72 @@ export function DetailSheet({ selection, at, dark, t, lang, onClose }: Props) {
   const bay = selection.space;
   const s = surface(dark);
 
+  // Read from a ref rather than closed over directly, so the memoized
+  // PanResponder below never needs rebuilding — recreating it mid-drag would
+  // drop the gesture (same reasoning as TimeScrubber's width ref).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  const translateY = useRef(new Animated.Value(0)).current;
+  const sheetHeightRef = useRef(0);
+
+  function onSheetLayout(e: LayoutChangeEvent) {
+    sheetHeightRef.current = e.nativeEvent.layout.height;
+  }
+
+  const responder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        // A small threshold so an ordinary tap on the header (e.g. the close
+        // button) never gets claimed as the start of a drag.
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+        onPanResponderMove: (_, g) => {
+          // Dragging up doesn't dismiss anything — only rubber-band down.
+          if (g.dy > 0) translateY.setValue(g.dy);
+        },
+        onPanResponderRelease: (_, g) => {
+          const height = sheetHeightRef.current || 400;
+          const pastThreshold = g.dy > height * 0.25 || g.vy > 1.2;
+          if (pastThreshold) {
+            Animated.timing(translateY, {
+              toValue: height,
+              duration: 180,
+              useNativeDriver: true,
+            }).start(() => onCloseRef.current());
+          } else {
+            Animated.spring(translateY, {
+              toValue: 0,
+              useNativeDriver: true,
+              bounciness: 4,
+            }).start();
+          }
+        },
+      }),
+    [translateY],
+  );
+
   return (
-    <View style={[styles.sheet, { backgroundColor: s.card }, elevation.high]}>
-      <View style={styles.headerRow}>
-        <View style={[styles.dot, { backgroundColor: accent }]} />
-        <View style={styles.headerText}>
-          <Text style={[type.verdict, styles.headline, { color: s.text }]}>
-            {headline(status, t)}
-          </Text>
-          <Text style={[type.body, styles.subline, { color: s.textDim }]}>
-            {subline(result, at, t, lang)}
-          </Text>
+    <Animated.View
+      style={[styles.sheet, { backgroundColor: s.card, transform: [{ translateY }] }, elevation.high]}
+      onLayout={onSheetLayout}
+    >
+      <View {...responder.panHandlers}>
+        <View style={[styles.grabber, { backgroundColor: s.hairline }]} />
+        <View style={styles.headerRow}>
+          <View style={[styles.dot, { backgroundColor: accent }]} />
+          <View style={styles.headerText}>
+            <Text style={[type.verdict, styles.headline, { color: s.text }]}>
+              {headline(status, t)}
+            </Text>
+            <Text style={[type.body, styles.subline, { color: s.textDim }]}>
+              {subline(result, at, t, lang)}
+            </Text>
+          </View>
+          <Pressable onPress={onClose} hitSlop={12} accessibilityLabel={t('sheet.close')}>
+            <Text style={[styles.close, { color: s.textDim }]}>✕</Text>
+          </Pressable>
         </View>
-        <Pressable onPress={onClose} hitSlop={12} accessibilityLabel={t('sheet.close')}>
-          <Text style={[styles.close, { color: s.textDim }]}>✕</Text>
-        </Pressable>
       </View>
 
       {result.needsVerification && (
@@ -167,7 +228,7 @@ export function DetailSheet({ selection, at, dark, t, lang, onClose }: Props) {
           {t('disclaimer.short')}
         </Text>
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -182,6 +243,13 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.lg,
     paddingTop: sp.md,
     paddingBottom: 28,
+  },
+  grabber: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: radius.pill,
+    marginBottom: sp.sm,
   },
   headerRow: {
     flexDirection: 'row',
